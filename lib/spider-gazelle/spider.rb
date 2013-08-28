@@ -1,30 +1,12 @@
 require 'set'
 
+
 module SpiderGazelle
 	class Spider
 
 
-		# From Celluloid by Tarcieri and Contributors (16/08/2013)
-		# https://github.com/celluloid/celluloid/blob/master/lib/celluloid/cpu_counter.rb
-		DEFAULT_LEG_COUNT = begin
-			case RbConfig::CONFIG['host_os'][/^[A-Za-z]+/]
-			when 'darwin'
-				Integer(`/usr/sbin/sysctl hw.ncpu`[/\d+/])
-			when 'linux'
-				if File.exists?("/sys/devices/system/cpu/present")
-					File.read("/sys/devices/system/cpu/present").split('-').last.to_i+1
-				else
-					Dir["/sys/devices/system/cpu/cpu*"].select { |n| n=~/cpu\d+/ }.count
-				end
-			when 'mingw', 'mswin'
-				Integer(ENV["NUMBER_OF_PROCESSORS"][/\d+/])
-			else
-				1 	# we'll go with a safe default if introspection fails
-			end
-		end
-
 		DEFAULT_OPTIONS = {
-			:leg_count => DEFAULT_LEG_COUNT,
+			:leg_count => ::Libuv.cpu_count || 1,
 			:host => '0.0.0.0',
         	:port => 8080
 		}
@@ -33,13 +15,56 @@ module SpiderGazelle
 		def initialize(app, options = {})
 			@spider = Libuv::Loop.new
 
+			# Create a function for stopping the spider from another thread
+			@squash = spider.async do
+				if @status == :running
+					@status = :squashing
+
+					# TODO:: Kill gazella here
+
+					spider.stop
+				end
+			end
+
 			@app = app
 			@options = DEFAULT_OPTIONS.merge(options)
 
+
+
+			# Manage the set of Gazelle pipe connections
+			@gazella = Set.new
+			@select_gazella = @gazella.cycle 	# provides a looping enumerator
+			@accept_gazella = proc { |gazelle|
+				if @gazella.size == 0
+					# start accepting connections
+					@tcp.listen(1024)
+				end
+
+				@gazella.add gazelle 			# add the new gazelle to the set
+				@select_gazella.rewind			# update the enumerator
+
+				gazelle.finally do
+					@gazella.delete gazelle
+					@select_gazella.rewind
+				end
+			}
+			@new_gazella = proc { |server|
+				server.accept @accept_gazella
+			}
+
+
+			# Connection management
+			@accept_connection = proc { |client|
+				gazelle = @select_gazella.next
+				gazelle.write2(connection, 'client')
+			}
+			@new_connection = proc { |server|
+				server.accept @accept_connection
+			}
+
+
 			@status = :dead		# Either dead, squashing, reanimating or running
 			@mode = :thread		# Either thread or process
-
-			@gazella = Set.new
 		end
 
 		# Start the server (this method blocks until completion)
@@ -47,21 +72,20 @@ module SpiderGazelle
 			return unless @status == :dead
 			@status = :reanimating
 
-			@spider.run do |spider|
-				# Create a function for stopping the spider from another thread
-				@squash = spider.async do
-					if @status == :running
-						@status = :squashing
-
-						# TODO:: Kill gazella here
-
-						spider.stop
-					end
-				end
-
+			@spider.run do |logger|
 				# Bind the socket
 				@tcp = spider.tcp
-				@tcp.bind(@options[:host], @options[:port])
+				@tcp.bind(@options[:host], @options[:port]) @new_connection
+
+				# Bind the pipe for communicating with gazelle
+				@delegator = @loop.pipe(true)
+				@delegator.bind(CONTROL_PIPE, @new_gazella)
+				@delegator.listen(128)
+
+				# Launch the gazelle here
+				::Libuv.cpu_count.times do
+					Gazelle.new(app, options)
+				end
 
 				# Update state only once the event loop is ready
 				@status = :running

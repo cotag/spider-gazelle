@@ -20,6 +20,7 @@ Gem::Specification.new do |s|
     s.add_dependency 'http-parser'
     s.add_dependency 'libuv'
     s.add_dependency 'rack'
+    s.add_dependency 'websocket-driver'
 
     s.add_development_dependency 'rspec'
     s.add_development_dependency 'yard'
