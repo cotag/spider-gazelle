@@ -28,6 +28,9 @@ module SpiderGazelle
             # Called after the work on the thread pool is complete
             @send_response = proc {
                 @socket.write @request.response
+                if !@request.keep_alive
+                    @socket.shutdown
+                end
                 # continue processing (don't wait for write to complete)
                 # if the write fails it will close the socket
                 nil
@@ -58,6 +61,11 @@ module SpiderGazelle
 
         # Chains the work in a promise queue
         def finished_request
+            if @state.keep_alive?
+                @parsing.keep_alive = true
+            else
+                @socket.stop_read
+            end
             @parsing.prepare(@state)
             @pending.push @parsing
             @worker = @worker.then @process_next

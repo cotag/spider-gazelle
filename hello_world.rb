@@ -8,5 +8,5 @@ app = lambda do |env|
 end
 
 server = SpiderGazelle::Spider.new (app)
-p 'starting server'
+p 'starting spider'
 server.run

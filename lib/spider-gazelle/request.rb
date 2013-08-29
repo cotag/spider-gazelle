@@ -35,7 +35,7 @@ module SpiderGazelle
         CLOSE = "close".freeze
 
 
-        attr_accessor :url, :header, :headers, :body, :response
+        attr_accessor :url, :header, :headers, :body, :response, :keep_alive
 
 
         # TODO:: ensure rack has all the information
@@ -46,7 +46,7 @@ module SpiderGazelle
         end
 
         def prepare(state)
-            # TODO:: check for upgrades and mark if we should close connection
+            # TODO:: check for upgrades
             @env = {
                 SERVER_SOFTWARE => SERVER,
                 SERVER_PORT => 8080,
@@ -60,7 +60,7 @@ module SpiderGazelle
                 REQUEST_URI => @url.freeze,
 
                 REQUEST_METHOD => state.http_method,
-                CONNECTION => state.keep_alive? ? KEEP_ALIVE : CLOSE
+                CONNECTION => @keep_alive ? KEEP_ALIVE : CLOSE
             }
         end
 
@@ -90,11 +90,11 @@ module SpiderGazelle
 
             # Build the response
             resp = "HTTP/1.1 #{status}\r\n"
-            headers[CONTENT_LENGTH] = body.size     # ensure correct size
+            headers[CONTENT_LENGTH] = resp_body.size     # ensure correct size
             headers.each do |key, value|
                 resp << key
                 resp << COLON_SPACE
-                resp << value
+                resp << value.to_s
                 resp << CRLF
             end
             resp << CRLF

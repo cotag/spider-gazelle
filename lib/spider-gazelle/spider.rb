@@ -45,6 +45,7 @@ module SpiderGazelle
 
 			# Connection management
 			@accept_connection = proc { |client|
+				client.enable_nodelay
 				gazelle = @select_gazella.next
 				gazelle.write2(client, NEW_SOCKET)
 			}
