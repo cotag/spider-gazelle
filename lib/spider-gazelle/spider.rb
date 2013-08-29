@@ -12,6 +12,7 @@ module SpiderGazelle
 		}
 
 		NEW_SOCKET = 's'.freeze
+		KILL_GAZELLE = 'k'.freeze
 
 
 		def initialize(app, options = {})
@@ -19,35 +20,50 @@ module SpiderGazelle
 			@app = app
 			@options = DEFAULT_OPTIONS.merge(options)
 
-			# Manage the set of Gazelle pipe connections
-			@gazella = Set.new
-			@select_gazella = @gazella.cycle 	# provides a looping enumerator for our round robin
-			@accept_gazella = proc { |gazelle|
-				p "gazelle #{@gazella.size} running"
+			# Manage the set of Gazelle socket listeners
+			@loops = Set.new
+			@select_loop = @loops.cycle 	# provides a looping enumerator for our round robin
+			@accept_loop = proc { |loop|
+				p "gazelle #{@loops.size} loop running"
 
 				# start accepting connections
-				if @gazella.size == 0
+				if @loops.size == 0
+					# Bind the socket
+					@tcp = @spider.tcp
+					@tcp.bind(@options[:host], @options[:port], @new_connection)
 					@tcp.listen(1024)
 				end
 
-				@gazella.add gazelle 		# add the new gazelle to the set
-				@select_gazella.rewind		# update the enumerator with the new gazelle
+				@loops.add loop 		# add the new gazelle to the set
+				@select_loop.rewind		# update the enumerator with the new gazelle
 
 				# If a gazelle dies or shuts down we update the set
-				gazelle.finally do
-					@gazella.delete gazelle
-					@select_gazella.rewind
+				loop.finally do
+					@loops.delete loop
+					@select_loop.rewind
+
+					if @loops.size == 0
+						@tcp.close
+					end
 				end
 			}
-			@new_gazella = proc { |server|
-				server.accept @accept_gazella
+
+			# Manage the set of Gazelle signal pipes
+			@gazella = Set.new
+			@accept_gazella = proc { |gazelle|
+				p "gazelle #{@gazella.size} signal port ready"
+				# add the signal port to the set
+				@gazella.add gazelle
+				gazelle.finally do
+					@gazella.delete gazelle
+				end
 			}
 
 			# Connection management
 			@accept_connection = proc { |client|
 				client.enable_nodelay
-				gazelle = @select_gazella.next
-				gazelle.write2(client, NEW_SOCKET)
+				loop = @select_loop.next
+				loop.write2(client, NEW_SOCKET)
 			}
 			@new_connection = proc { |server|
 				server.accept @accept_connection
@@ -73,27 +89,31 @@ module SpiderGazelle
 
 				# Create a function for stopping the spider from another thread
 				@squash = @spider.async do
-					if @status == :running
-						@status = :squashing
-
-						# TODO:: Kill gazella here
-
-						@spider.stop
-					end
+					squash
 				end
 
-				# Bind the socket
-				@tcp = @spider.tcp
-				@tcp.bind(@options[:host], @options[:port], @new_connection)
-
-				# Bind the pipe for communicating with gazelle
+				# Bind the pipe for sending sockets to gazelle
 				begin
-					File.unlink(CONTROL_PIPE)
+					File.unlink(DELEGATE_PIPE)
 				rescue
 				end
 				@delegator = @spider.pipe(true)
-				@delegator.bind(CONTROL_PIPE, @new_gazella)
+				@delegator.bind(DELEGATE_PIPE) do 
+					@delegator.accept @accept_loop
+				end
 				@delegator.listen(128)
+
+				# Bind the pipe for communicating with gazelle
+				begin
+					File.unlink(SIGNAL_PIPE)
+				rescue
+				end
+				@signaller = @spider.pipe(true)
+				@signaller.bind(SIGNAL_PIPE) do
+					@signaller.accept @accept_gazella
+				end
+				@signaller.listen(128)
+
 
 				# Launch the gazelle here
 				@options[:gazelle_count].times do
@@ -103,9 +123,9 @@ module SpiderGazelle
 					end
 				end
 
-
-				@spider.signal(:INT) do 
-					@spider.stop
+				# Signal gazelle death here
+				@spider.signal(:INT) do
+					squash
 				end
 
 				# Update state only once the event loop is ready
@@ -115,13 +135,45 @@ module SpiderGazelle
 
 		# If the spider is running we will request to squash it (thread safe)
 		def stop
-			return false unless @status == :running
 			@squash.call
-			return true
 		end
 
 
 		protected
+
+
+		# Triggers a shutdown of the gazelles.
+		# We ensure the process is running here as signals can be called multiple times
+		def squash
+			if @status == :running
+
+				# Update the state and close the socket
+				@status = :squashing
+				@tcp.close
+
+				# Signal all the gazelle to shutdown
+				promises = []
+				@gazella.each do |gazelle|
+					promises << gazelle.write(KILL_GAZELLE)
+				end
+
+				# Once the signal has been sent we can stop the spider loop
+				@spider.all(*promises).finally do
+					begin
+						@delegator.close
+						File.unlink(DELEGATE_PIPE)
+					rescue
+					end
+					begin
+						@signaller.close
+						File.unlink(SIGNAL_PIPE)
+					rescue
+					end
+					@spider.stop
+					@status = :dead
+				end
+			end
+		end
 
 
 	end

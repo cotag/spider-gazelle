@@ -42,22 +42,22 @@ module SpiderGazelle
 					end
 				end
 
-				# The pipe to the connection delegation server
-				@spider_comms = @gazelle.pipe(true)
-				@spider_comms.connect(CONTROL_PIPE) do
-					@spider_comms.progress do |data, socket|
-						if data == Spider::NEW_SOCKET
-							new_connection(socket)
-						else
-							stop
-						end
+				# A pipe used to forward connections to different threads
+				@socket_server = @gazelle.pipe(true)
+				@socket_server.connect(DELEGATE_PIPE) do
+					@socket_server.progress do |data, socket|
+						new_connection(socket)
 					end
-					@spider_comms.start_read2
+					@socket_server.start_read2
 				end
 
-				# TODO:: replace this with a message from the spider
-				@gazelle.signal(:INT) do 
-					@gazelle.stop
+				# A pipe used to signal various control commands (shutdown, etc)
+				@signal_server = @gazelle.pipe
+				@signal_server.connect(SIGNAL_PIPE) do
+					@signal_server.progress do |data|
+						process_signal(data)
+					end
+					@signal_server.start_read
 				end
 			end
 		end
@@ -83,10 +83,21 @@ module SpiderGazelle
             end
             socket.start_read
 
-            # Remove connection once closed (will auto-close if the socket closes)
-			connection.finally do
+            # Remove connection if the socket closes
+			socket.finally do
 				@connections.delete(connection)
 			end
+		end
+
+		def process_signal(data)
+			if data == Spider::KILL_GAZELLE
+				shutdown
+			end
+		end
+
+		def shutdown
+			# TODO:: do this nicely
+			@gazelle.stop
 		end
 	end
 end

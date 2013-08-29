@@ -48,6 +48,9 @@ module SpiderGazelle
         def prepare(state)
             # TODO:: check for upgrades
             @env = {
+                REQUEST_URI => @url.freeze,
+
+
                 SERVER_SOFTWARE => SERVER,
                 SERVER_PORT => 8080,
 
@@ -56,11 +59,10 @@ module SpiderGazelle
                 RACK_RUNONCE => false,
                 RACK_URLSCHEME => HTTP_URL_SCHEME,
 
-                SCRIPT_NAME => EMPTY,    # TODO:: needed?
-                REQUEST_URI => @url.freeze,
+                SCRIPT_NAME => EMPTY,
+                
 
-                REQUEST_METHOD => state.http_method,
-                CONNECTION => @keep_alive ? KEEP_ALIVE : CLOSE
+                REQUEST_METHOD => state.http_method
             }
         end
 
@@ -90,7 +92,8 @@ module SpiderGazelle
 
             # Build the response
             resp = "HTTP/1.1 #{status}\r\n"
-            headers[CONTENT_LENGTH] = resp_body.size     # ensure correct size
+            headers[CONTENT_LENGTH] = resp_body.size                # ensure correct size
+            headers[CONNECTION] = @keep_alive ? KEEP_ALIVE : CLOSE  # ensure appropriate keep alive is set
             headers.each do |key, value|
                 resp << key
                 resp << COLON_SPACE
@@ -99,6 +102,7 @@ module SpiderGazelle
             end
             resp << CRLF
             resp << resp_body
+
             @response = resp
         end
     end

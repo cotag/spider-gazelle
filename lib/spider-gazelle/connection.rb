@@ -2,7 +2,7 @@ require 'stringio'
 
 
 module SpiderGazelle
-    class Connection < ::Libuv::Q::DeferredPromise
+    class Connection
 
 
         SET_INSTANCE_TYPE = proc {|inst| inst.type = :request}
@@ -12,10 +12,6 @@ module SpiderGazelle
 
 
         def initialize(loop, socket, queue) # TODO:: port information
-            # initialize the promise
-            super(loop, loop.defer)
-            @defer.resolve(socket)  # Connection depends on the socket
-
             # A single parser instance per-connection (supports pipelining)
             @state = ::HttpParser::Parser.new_instance &SET_INSTANCE_TYPE
             @pending = []
@@ -45,7 +41,7 @@ module SpiderGazelle
             # Used to chain promises (ensures requests are processed in order)
             @process_next = proc {
                 @request = @pending.shift
-                work = @loop.work @work
+                work = loop.work @work
                 work.then @send_response, @send_error   # resolves the promise with a promise
             }
             @worker = queue  # start queue with an existing resolved promise (::Libuv::Q::ResolvedPromise.new(@loop, true))

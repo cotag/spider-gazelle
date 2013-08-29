@@ -9,6 +9,8 @@ require "spider-gazelle/gazelle"
 require "spider-gazelle/spider"
 
 module SpiderGazelle
-    # Location of the pipe used for socket delegation
-    CONTROL_PIPE = "/tmp/spider-gazelle.delegator"
+    # Delegate pipe used for passing sockets to the gazelles
+    # Signal pipe used to pass control signals
+    DELEGATE_PIPE = "/tmp/spider-gazelle.delegate"
+    SIGNAL_PIPE = "/tmp/spider-gazelle.signal"
 end
