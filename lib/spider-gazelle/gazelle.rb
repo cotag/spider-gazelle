@@ -4,60 +4,88 @@ require 'set'
 module SpiderGazelle
 	class Gazelle
 		def initialize(app, options)
-			@app, @options = app, options
-
 			@gazelle = Libuv::Loop.new
-			@clients = Set.new 		# Set of active connections on this thread
-			@active_requests = [] 	# Requests currently being processed
-			@request_cache = []		# Stale request objects cached for reuse
+			@connections = Set.new 		# Set of active connections on this thread
+			@parser_cache = []			# Stale parser objects cached for reuse
+			@connection_queue = ::Libuv::Q::ResolvedPromise.new(@gazelle, true)
 
-			# The pipe to the connection delegation server
-			@spider_comms = @loop.pipe(true)
-			@spider_comms.connect(CONTROL_PIPE) do
-				@spider_comms.progress do |data, connection|
-					new_client(connection)
-				end
-			end
-
-			# A single parser instance for processing requests
+			# A single parser instance for processing requests for each gazelle
 			@parser = ::HttpParser::Parser.new
+			@parser.on_message_begin do
+				@connection.start_request(Request.new(app, options))
+			end
 			@parser.on_url do |instance, url|
-				@request.url = url
+				@connection.parsing.url = url
 			end
 			@parser.on_header_field do |instance, header|
-				@request.header = header
+				@connection.parsing.header = header
 			end
 			@parser.on_header_value do |instance, value|
-				@request.headers[@request.header] = value
+				req = @connection.parsing
+				req.headers[req.header] = value
 			end
-			#@parser.on_headers_complete do
-			#	@request.commit_headers
-			#end
 			@parser.on_body do |instance, data|
-				@request.body << data
+				@connection.parsing.body << data
 			end
 			@parser.on_message_complete do
-				@request.complete!
+				@connection.finished_request
 			end
 		end
 
-		def context=(request)
-			@request = request
-		end
+		def run
+			@gazelle.run do |logger|
+				logger.progress do |level, errorid, error|
+					begin
+						p "Log called: #{level}: #{errorid}\n#{error.message}\n#{error.backtrace.join("\n")}\n"
+					rescue Exception
+						p 'error in gazelle logger'
+					end
+				end
 
-		def parse(request, data)
-			@parser.parse request, data
+				# The pipe to the connection delegation server
+				@spider_comms = @gazelle.pipe(true)
+				@spider_comms.connect(CONTROL_PIPE) do
+					@spider_comms.progress do |data, socket|
+						if data == Spider::NEW_SOCKET
+							new_connection(socket)
+						else
+							stop
+						end
+					end
+					@spider_comms.start_read2
+				end
+
+				# TODO:: replace this with a message from the spider
+				@gazelle.signal(:INT) do 
+					@gazelle.stop
+				end
+			end
 		end
 
 
 		protected
 
 
-		def new_client(connection)
-			client = Client.new self, connection
-			@clients.add client
-			client.finally do
-				@clients.delete(client)
+		def new_connection(socket)
+			# Keep track of the connection
+			connection = Connection.new @gazelle, socket, @connection_queue
+			@connections.add connection
+
+			# process any data coming from the socket
+			socket.progress do |data|
+				# Keep track of which connection we are processing for the callbacks
+                @connection = connection
+
+                # Check for errors during the parsing of the request
+                if !@parser.parse(connection.state, data)
+					connection.parsing_error
+				end
+            end
+            socket.start_read
+
+            # Remove connection once closed (will auto-close if the socket closes)
+			connection.finally do
+				@connections.delete(connection)
 			end
 		end
 	end
