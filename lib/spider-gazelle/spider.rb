@@ -32,6 +32,9 @@ module SpiderGazelle
 					@tcp = @spider.tcp
 					@tcp.bind(@options[:host], @options[:port], @new_connection)
 					@tcp.listen(1024)
+					@tcp.catch do
+						@spider.log :error, :tcp_binding, e
+					end
 				end
 
 				@loops.add loop 		# add the new gazelle to the set

@@ -77,7 +77,7 @@ module SpiderGazelle
                 @connection = connection
 
                 # Check for errors during the parsing of the request
-                if !@parser.parse(connection.state, data)
+                if @parser.parse(connection.state, data)
 					connection.parsing_error
 				end
             end
