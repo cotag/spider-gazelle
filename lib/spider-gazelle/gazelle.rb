@@ -3,6 +3,8 @@ require 'set'
 
 module SpiderGazelle
 	class Gazelle
+
+
 		def initialize(app, options)
 			@gazelle = Libuv::Loop.new
 			@connections = Set.new 		# Set of active connections on this thread
@@ -15,7 +17,9 @@ module SpiderGazelle
 				@connection.start_request(Request.new(app, options))
 			end
 			@parser.on_url do |instance, url|
-				@connection.parsing.url = url
+				req = @connection.parsing
+				req.url = url
+				req.http_method = @connection.state.http_method # Will be available at this point
 			end
 			@parser.on_header_field do |instance, header|
 				@connection.parsing.header = header
@@ -30,6 +34,17 @@ module SpiderGazelle
 			@parser.on_message_complete do
 				@connection.finished_request
 			end
+
+			# Single progress callback for each gazelle
+			@on_progress = proc { |data, socket|
+				# Keep track of which connection we are processing for the callbacks
+	            @connection = socket.storage
+
+	            # Check for errors during the parsing of the request
+	            if @parser.parse(@connection.state, data)
+					@connection.parsing_error
+				end
+			}.freeze
 		end
 
 		def run
@@ -70,17 +85,10 @@ module SpiderGazelle
 			# Keep track of the connection
 			connection = Connection.new @gazelle, socket, @connection_queue
 			@connections.add connection
+			socket.storage = connection 	# This allows us to re-use the one proc for parsing
 
 			# process any data coming from the socket
-			socket.progress do |data|
-				# Keep track of which connection we are processing for the callbacks
-                @connection = connection
-
-                # Check for errors during the parsing of the request
-                if @parser.parse(connection.state, data)
-					connection.parsing_error
-				end
-            end
+			socket.progress @on_progress
             socket.start_read
 
             # Remove connection if the socket closes

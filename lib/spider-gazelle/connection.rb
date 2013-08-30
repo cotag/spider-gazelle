@@ -34,7 +34,7 @@ module SpiderGazelle
             @send_error = proc { |reason|
                 p "send error: #{reason}"
                 # log error reason
-                # send response (500 internal error)
+                # TODO:: send response (500 internal error)
                 # no need to close the socket as this isn't fatal
                 nil
             }
@@ -54,17 +54,18 @@ module SpiderGazelle
 
         # Creates a new request state object
         def start_request(request)
+            @env ||= Request::PROTO_ENV.dup
+            request.env = @env  # env should not need to be re-created over the lifetime of the connection
             @parsing = request
         end
 
         # Chains the work in a promise queue
         def finished_request
-            if @state.keep_alive?
-                @parsing.keep_alive = true
-            else
-                @socket.stop_read
+            if !@state.keep_alive?
+                @parsing.keep_alive = false
+                @socket.stop_read   # we don't want to do any more work then we need to
             end
-            @parsing.prepare(@state)
+            @parsing.upgrade = @state.upgrade?
             @pending.push @parsing
             @queue_worker = @queue_worker.then @process_next
         end

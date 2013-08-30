@@ -73,7 +73,11 @@ module SpiderGazelle
 			}
 
 			@status = :dead		# Either dead, squashing, reanimating or running
-			@mode = :thread		# Either thread or process
+			@mode = :thread		# Either thread or process (if we one day want to support this)
+
+			# Update the base request environment
+			Request::PROTO_ENV[Request::SERVER_PORT] = @options[:port]
+
 		end
 
 		# Start the server (this method blocks until completion)
@@ -161,8 +165,8 @@ module SpiderGazelle
 				end
 
 				# Once the signal has been sent we can stop the spider loop
-				@spider.all(*promises).finally do
-					begin
+				@spider.finally(*promises).finally do
+					begin # TODO:: need a better system for ensuring these are cleaned up
 						@delegator.close
 						File.unlink(DELEGATE_PIPE)
 					rescue
