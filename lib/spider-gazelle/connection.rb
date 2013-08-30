@@ -41,10 +41,12 @@ module SpiderGazelle
             # Used to chain promises (ensures requests are processed in order)
             @process_next = proc {
                 @request = @pending.shift
-                work = loop.work @work
-                work.then @send_response, @send_error   # resolves the promise with a promise
+                @current_worker = loop.work @work
+                @current_worker.then @send_response, @send_error   # resolves the promise with a promise
             }
-            @worker = queue  # start queue with an existing resolved promise (::Libuv::Q::ResolvedPromise.new(@loop, true))
+            @current_worker = queue # keep track of work queue head to prevent unintentional GC
+            @queue_worker = queue   # start queue with an existing resolved promise (::Libuv::Q::ResolvedPromise.new(@loop, true))
+            
 
             # Socket for writing the response
             @socket = socket
@@ -64,7 +66,7 @@ module SpiderGazelle
             end
             @parsing.prepare(@state)
             @pending.push @parsing
-            @worker = @worker.then @process_next
+            @queue_worker = @queue_worker.then @process_next
         end
 
         # The parser encountered an error
@@ -75,7 +77,7 @@ module SpiderGazelle
             # We no longer care for any further requests from this client
             # however we will finish processing any valid pipelined requests before shutting down
             @socket.stop_read
-            @worker = @worker.then do
+            @queue_worker = @queue_worker.then do
                 # TODO:: send response (400 bad request)
                 @socket.shutdown
             end

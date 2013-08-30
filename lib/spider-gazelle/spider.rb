@@ -8,7 +8,7 @@ module SpiderGazelle
 		DEFAULT_OPTIONS = {
 			:gazelle_count => ::Libuv.cpu_count || 1,
 			:host => '127.0.0.1',
-        	:port => 8080
+        	:port => 8081
 		}
 
 		NEW_SOCKET = 's'.freeze
@@ -32,8 +32,8 @@ module SpiderGazelle
 					@tcp = @spider.tcp
 					@tcp.bind(@options[:host], @options[:port], @new_connection)
 					@tcp.listen(1024)
-					@tcp.catch do
-						@spider.log :error, :tcp_binding, e
+					@tcp.catch do |e|
+						p "tcp bind error: #{e}"
 					end
 				end
 
