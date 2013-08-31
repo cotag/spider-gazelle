@@ -62,13 +62,14 @@ module SpiderGazelle
         }
 
 
-        attr_accessor :env, :url, :header, :body, :response, :keep_alive, :upgrade
+        attr_accessor :env, :url, :header, :body, :keep_alive, :upgrade, :response
 
 
         def initialize(app, options)
             @app, @options = app, options
             @body = ''
             @header = ''
+            @url = ''
             @env = PROTO_ENV.dup
         end
 

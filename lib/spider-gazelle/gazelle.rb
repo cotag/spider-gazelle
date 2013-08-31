@@ -21,9 +21,7 @@ module SpiderGazelle
 				@connection.start_request(Request.new(app, options))
 			end
 			@parser.on_url do |instance, url|
-				req = @connection.parsing
-				req.url = url
-				req.env[REQUEST_METHOD] = @connection.state.http_method # Will be available at this point
+				@connection.parsing.url << url
 			end
 			@parser.on_header_field do |instance, header|
 				req = @connection.parsing
@@ -50,6 +48,7 @@ module SpiderGazelle
 				@connection.parsing.body << data
 			end
 			@parser.on_message_complete do
+				@connection.parsing.env[REQUEST_METHOD] = @connection.state.http_method
 				@connection.finished_request
 			end
 
