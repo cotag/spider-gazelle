@@ -5,6 +5,10 @@ module SpiderGazelle
 	class Gazelle
 
 
+		HTTP_META = 'HTTP_'.freeze
+		REQUEST_METHOD = 'REQUEST_METHOD'.freeze    # GET, POST, etc
+
+
 		def initialize(app, options)
 			@gazelle = Libuv::Loop.new
 			@connections = Set.new 		# Set of active connections on this thread
@@ -19,14 +23,28 @@ module SpiderGazelle
 			@parser.on_url do |instance, url|
 				req = @connection.parsing
 				req.url = url
-				req.http_method = @connection.state.http_method # Will be available at this point
+				req.env[REQUEST_METHOD] = @connection.state.http_method # Will be available at this point
 			end
 			@parser.on_header_field do |instance, header|
-				@connection.parsing.header = header
+				req = @connection.parsing
+				if req.header.frozen?
+					req.header = header
+				else
+					req.header << header
+				end
 			end
 			@parser.on_header_value do |instance, value|
 				req = @connection.parsing
-				req.headers[req.header] = value
+				if req.header.frozen?
+					req.env[req.header] << value
+				else
+					header = req.header
+					header.upcase!
+					header.gsub!('-', '_')
+					header.prepend(HTTP_META)
+					header.freeze
+					req.env[header] = value
+				end
 			end
 			@parser.on_body do |instance, data|
 				@connection.parsing.body << data

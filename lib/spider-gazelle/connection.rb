@@ -54,8 +54,6 @@ module SpiderGazelle
 
         # Creates a new request state object
         def start_request(request)
-            @env ||= Request::PROTO_ENV.dup
-            request.env = @env  # env should not need to be re-created over the lifetime of the connection
             @parsing = request
         end
 

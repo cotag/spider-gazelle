@@ -11,7 +11,6 @@ module SpiderGazelle
         QUERY_STRING = 'QUERY_STRING'.freeze        # portion of the request following a '?' (empty if none)
         SERVER_NAME = 'SERVER_NAME'.freeze          # required although HTTP_HOST takes priority if set
         SERVER_PORT = 'SERVER_PORT'.freeze          # required (set in spider.rb init)
-        REQUEST_METHOD = 'REQUEST_METHOD'.freeze    # GET, POST, etc
         REQUEST_URI = 'REQUEST_URI'.freeze
         REQUEST_PATH = 'REQUEST_PATH'.freeze
         RACK_URLSCHEME = 'rack.url_scheme'.freeze   # http or https
@@ -26,6 +25,7 @@ module SpiderGazelle
         HTTP_11 = 'HTTP/1.1'.freeze     # used in PROTO_ENV
         HTTP_URL_SCHEME = 'http'.freeze
         HTTPS_URL_SCHEME = 'https'.freeze
+        HTTP_HOST = 'HTTP_HOST'.freeze
         COLON_SPACE = ': '.freeze
         CRLF = "\r\n".freeze
         LOCALHOST = 'localhost'.freeze
@@ -34,6 +34,11 @@ module SpiderGazelle
         CONNECTION = "Connection".freeze
         KEEP_ALIVE = "Keep-Alive".freeze
         CLOSE = "close".freeze
+
+        HTTP_CONTENT_LENGTH = 'HTTP_CONTENT_LENGTH'.freeze
+        HTTP_CONTENT_TYPE = 'HTTP_CONTENT_TYPE'.freeze
+        HTTP_AUTHORIZATION = 'AUTHORIZATION'.freeze
+        HTTP_CONNECTION = 'HTTP_CONNECTION'.freeze
 
 
         #
@@ -57,17 +62,22 @@ module SpiderGazelle
         }
 
 
-        attr_accessor :env, :url, :header, :headers, :body, :response, :keep_alive, :http_method, :upgrade
+        attr_accessor :env, :url, :header, :body, :response, :keep_alive, :upgrade
 
 
         def initialize(app, options)
             @app, @options = app, options
             @body = ''
-            @headers = {}
+            @header = ''
+            @env = PROTO_ENV.dup
         end
 
         def execute!
-            @env[REQUEST_METHOD] = http_method.freeze
+            @env.delete(HTTP_CONTENT_LENGTH)
+            @env.delete(HTTP_CONTENT_TYPE)
+            @env.delete(HTTP_AUTHORIZATION)
+            @env.delete(HTTP_CONNECTION)
+
             @env[REQUEST_URI] = @url.freeze
             @env[RACK_INPUT] = StringIO.new(@body)
 
@@ -85,19 +95,19 @@ module SpiderGazelle
             end
 
             # Grab the host name from the request
-=begin            if host = @headers[HTTP_HOST]
+            if host = @env[HTTP_HOST]
                 if colon = host.index(':')
-                    env[SERVER_NAME] = host[0, colon]
-                    env[SERVER_PORT] = host[colon+1, host.bytesize]
+                    @env[SERVER_NAME] = host[0, colon]
+                    @env[SERVER_PORT] = host[colon+1, host.bytesize]
                 else
-                    env[SERVER_NAME] = host
-                    env[SERVER_PORT] = PROTO_ENV[SERVER_PORT]
+                    @env[SERVER_NAME] = host
+                    @env[SERVER_PORT] = PROTO_ENV[SERVER_PORT]
                 end
             else
-                env[SERVER_NAME] = LOCALHOST
-                env[SERVER_PORT] = PROTO_ENV[SERVER_PORT]
+                @env[SERVER_NAME] = LOCALHOST
+                @env[SERVER_PORT] = PROTO_ENV[SERVER_PORT]
             end
-=end
+
             # Process the request
             status, headers, body = @app.call(@env)
             # TODO:: check if upgrades were handled here (hijack_io)
@@ -112,8 +122,6 @@ module SpiderGazelle
             resp = "HTTP/1.1 #{status}\r\n"
             headers[CONTENT_LENGTH] = resp_body.size.to_s           # ensure correct size
             headers[CONNECTION] = CLOSE if @keep_alive == false     # ensure appropriate keep alive is set (http 1.1 way)
-
-            puts @headers.inspect
 
             headers.each do |key, value|
                 next if key.start_with? RACK
