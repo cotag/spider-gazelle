@@ -9,6 +9,7 @@ module SpiderGazelle
 
 
         attr_reader :state, :parsing
+        attr_accessor :queue_worker
 
 
         def initialize(loop, socket, queue) # TODO:: port information
@@ -23,16 +24,20 @@ module SpiderGazelle
             }
             # Called after the work on the thread pool is complete
             @send_response = proc {
-                @socket.write @request.response
-                if !@request.keep_alive
-                    @socket.shutdown
+                # As we have come back from another thread the socket may have closed
+                # This check is an optimisation, the call to write would fail safely
+                if !@socket.closed
+                    @socket.write @request.response
+                    if !@request.keep_alive
+                        @socket.shutdown
+                    end
                 end
                 # continue processing (don't wait for write to complete)
                 # if the write fails it will close the socket
                 nil
             }
             @send_error = proc { |reason|
-                p "send error: #{reason}"
+                p "send error: #{reason.message}\n#{reason.backtrace.join("\n")}\n"
                 # log error reason
                 # TODO:: send response (500 internal error)
                 # no need to close the socket as this isn't fatal

@@ -92,7 +92,6 @@ module SpiderGazelle
             else
                 @env[PATH_INFO] = @url
                 @env[REQUEST_PATH] = @url
-                @env[QUERY_STRING] = EMPTY
             end
 
             # Grab the host name from the request

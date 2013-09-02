@@ -17,18 +17,21 @@ Gem::Specification.new do |s|
     EOF
 
     s.add_dependency 'rake'
-    s.add_dependency 'http-parser'
-    s.add_dependency 'libuv'
-    s.add_dependency 'rack'
-    s.add_dependency 'websocket-driver'
+    s.add_dependency 'http-parser'          # Ruby FFI bindings for https://github.com/joyent/http-parser
+    s.add_dependency 'libuv'                # Ruby FFI bindings for https://github.com/joyent/libuv
+    s.add_dependency 'rack', '>= 1.0.0'     # Ruby web server interface
+    s.add_dependency 'websocket-driver'     # Websocket parser
 
-    s.add_development_dependency 'rspec'
-    s.add_development_dependency 'yard'
+    s.add_development_dependency 'rspec'    # Testing framework
+    s.add_development_dependency 'yard'     # Comment based documentation generation
     
 
-    s.files = Dir["{lib}/**/*"] + %w(Rakefile spider-gazelle.gemspec README.md LICENSE)
+    s.files = Dir["{lib,bin}/**/*"] + %w(Rakefile spider-gazelle.gemspec README.md LICENSE)
     s.test_files = Dir["spec/**/*"]
     s.extra_rdoc_files = ["README.md"]
+
+    s.bindir = 'bin'
+    s.executables = ['sg']
 
     s.require_paths = ["lib"]
 end

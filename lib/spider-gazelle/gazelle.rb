@@ -44,11 +44,13 @@ module SpiderGazelle
 					req.env[header] = value
 				end
 			end
+			@parser.on_headers_complete do
+				@connection.parsing.env[REQUEST_METHOD] = @connection.state.http_method.to_s
+			end
 			@parser.on_body do |instance, data|
 				@connection.parsing.body << data
 			end
 			@parser.on_message_complete do
-				@connection.parsing.env[REQUEST_METHOD] = @connection.state.http_method
 				@connection.finished_request
 			end
 

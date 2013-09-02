@@ -1,11 +1,15 @@
+require 'rack/handler'
+require 'spider-gazelle'
+
+
 module Rack
 	module Handler
 	    module SpiderGazelle
-	    	DEFAULT_OPTIONS = {
-	    		:Host => '0.0.0.0',
-	    		:Port => 8080,
-	    		:Verbose => false
-	    	}
+			DEFAULT_OPTIONS = {
+				:Host => '0.0.0.0',
+				:Port => 8080,
+				:Verbose => false
+			}
 
 	    	def self.run(app, options = {})
 	    		options = DEFAULT_OPTIONS.merge(options)
@@ -18,7 +22,7 @@ module Rack
 	    			ENV['RACK_ENV'] = options[:environment].to_s
 	    		end
 
-	    		server = ::SpiderGazelle::Server.new(app)
+	    		server = ::SpiderGazelle::Spider.new(app, options)
 
 	    		puts "Spider-Gazelle #{::SpiderGazelle::VERSION} starting..."
 	    		puts "* Environment: #{ENV['RACK_ENV']}"
@@ -26,18 +30,12 @@ module Rack
 
 	    		yield server if block_given?
 
-	    		begin
-	    			server.run.join
-	    		rescue Interrupt
-	    			puts "* Gracefully stopping, waiting for requests to finish"
-	    			server.stop(true)
-	    			puts "* Goodbye!"
-	    		end
+	    		server.run
 	    	end
 
 			def self.valid_options
 				{
-					"Host=HOST"       => "Hostname to listen on (default: localhost)",
+					"Host=HOST"       => "Hostname to listen on (default: 0.0.0.0)",
 					"Port=PORT"       => "Port to listen on (default: 8080)",
 					"Quiet"           => "Don't report each request"
 				}

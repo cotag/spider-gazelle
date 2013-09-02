@@ -3,10 +3,11 @@ require "libuv"         # Ruby Libuv FFI wrapper
 require "rack"          # Ruby webserver abstraction
 
 require "spider-gazelle/version"
-require "spider-gazelle/request"
-require "spider-gazelle/connection"
-require "spider-gazelle/gazelle"
-require "spider-gazelle/spider"
+require "spider-gazelle/request"        # Holds request information and handles request processing
+require "spider-gazelle/connection"     # Holds connection information and handles request pipelining
+require "spider-gazelle/gazelle"        # Processes data received from connections
+require "spider-gazelle/spider"         # Accepts connections and offloads them to gazelles
+
 
 module SpiderGazelle
     # Delegate pipe used for passing sockets to the gazelles
