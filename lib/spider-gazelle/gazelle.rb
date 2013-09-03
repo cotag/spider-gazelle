@@ -18,7 +18,7 @@ module SpiderGazelle
 			# A single parser instance for processing requests for each gazelle
 			@parser = ::HttpParser::Parser.new
 			@parser.on_message_begin do
-				@connection.start_request(Request.new(app, options))
+				@connection.start_parsing(Request.new(app, options))
 			end
 			@parser.on_url do |instance, url|
 				@connection.parsing.url << url
@@ -51,7 +51,7 @@ module SpiderGazelle
 				@connection.parsing.body << data
 			end
 			@parser.on_message_complete do
-				@connection.finished_request
+				@connection.finished_parsing
 			end
 
 			# Single progress callback for each gazelle

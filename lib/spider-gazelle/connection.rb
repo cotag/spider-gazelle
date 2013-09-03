@@ -28,7 +28,7 @@ module SpiderGazelle
                 # This check is an optimisation, the call to write would fail safely
                 if !@socket.closed
                     @socket.write @request.response
-                    if !@request.keep_alive
+                    if @request.keep_alive == false
                         @socket.shutdown
                     end
                 end
@@ -58,12 +58,12 @@ module SpiderGazelle
         end
 
         # Creates a new request state object
-        def start_request(request)
+        def start_parsing(request)
             @parsing = request
         end
 
         # Chains the work in a promise queue
-        def finished_request
+        def finished_parsing
             if !@state.keep_alive?
                 @parsing.keep_alive = false
                 @socket.stop_read   # we don't want to do any more work then we need to
