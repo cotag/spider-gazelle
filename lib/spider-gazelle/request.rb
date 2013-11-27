@@ -1,4 +1,5 @@
 require 'stringio'
+require 'benchmark'
 
 
 module SpiderGazelle
@@ -40,6 +41,9 @@ module SpiderGazelle
         HTTP_AUTHORIZATION = 'AUTHORIZATION'.freeze
         HTTP_CONNECTION = 'HTTP_CONNECTION'.freeze
 
+        SERVER_SOFTWARE   = 'SERVER_SOFTWARE'.freeze
+        SERVER   = 'SpiderGazelle'.freeze
+
 
         #
         # TODO:: Add HTTP headers to the env and capitalise them and prefix them with HTTP_
@@ -58,7 +62,8 @@ module SpiderGazelle
             'SERVER_PROTOCOL'.freeze => HTTP_11,
             RACK_URLSCHEME => HTTP_URL_SCHEME,          # TODO:: check for / support ssl
 
-            GATEWAY_INTERFACE => CGI_VER
+            GATEWAY_INTERFACE => CGI_VER,
+            SERVER_SOFTWARE   => SERVER
         }
 
 
@@ -109,9 +114,13 @@ module SpiderGazelle
             end
 
             # Process the request
-            status, headers, body = @app.call(@env)
+            #p @env
+            status, headers, body = nil, nil, nil
+            puts Benchmark.measure {
+                status, headers, body = @app.call(@env)
+            }
             # TODO:: check if upgrades were handled here (hijack_io)
-
+            
             # Collect the body
             resp_body = ''
             body.each do |val|

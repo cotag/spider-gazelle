@@ -19,42 +19,20 @@ module SpiderGazelle
 
             # Work callback for thread pool processing
             @request = nil
-            @work = proc {
-                @request.execute!
-            }
+            @work = method(:work)
+
             # Called after the work on the thread pool is complete
-            @send_response = proc {
-                # As we have come back from another thread the socket may have closed
-                # This check is an optimisation, the call to write would fail safely
-                if !@socket.closed
-                    @socket.write @request.response
-                    if @request.keep_alive == false
-                        @socket.shutdown
-                    end
-                end
-                # continue processing (don't wait for write to complete)
-                # if the write fails it will close the socket
-                nil
-            }
-            @send_error = proc { |reason|
-                p "send error: #{reason.message}\n#{reason.backtrace.join("\n")}\n"
-                # log error reason
-                # TODO:: send response (500 internal error)
-                # no need to close the socket as this isn't fatal
-                nil
-            }
+            @send_response = method(:send_response)
+            @send_error = method(:send_error)
+
             # Used to chain promises (ensures requests are processed in order)
-            @process_next = proc {
-                @request = @pending.shift
-                @current_worker = loop.work @work
-                @current_worker.then @send_response, @send_error   # resolves the promise with a promise
-            }
+            @process_next = method(:process_next)
             @current_worker = queue # keep track of work queue head to prevent unintentional GC
             @queue_worker = queue   # start queue with an existing resolved promise (::Libuv::Q::ResolvedPromise.new(@loop, true))
             
-
             # Socket for writing the response
             @socket = socket
+            @loop = loop
         end
 
         # Creates a new request state object
@@ -85,6 +63,42 @@ module SpiderGazelle
                 # TODO:: send response (400 bad request)
                 @socket.shutdown
             end
+        end
+
+
+        protected
+
+
+        def send_response(result)
+            # As we have come back from another thread the socket may have closed
+            # This check is an optimisation, the call to write and shutdown would fail safely
+            if !@socket.closed
+                @socket.write @request.response
+                if @request.keep_alive == false
+                    @socket.shutdown
+                end
+            end
+            # continue processing (don't wait for write to complete)
+            # if the write fails it will close the socket
+            nil
+        end
+
+        def send_error(reason)
+            p "send error: #{reason.message}\n#{reason.backtrace.join("\n")}\n"
+            # log error reason
+            # TODO:: send response (500 internal error)
+            # no need to close the socket as this isn't fatal
+            nil
+        end
+
+        def process_next(result)
+            @request = @pending.shift
+            @current_worker = @loop.work @work
+            @current_worker.then @send_response, @send_error   # resolves the promise with a promise
+        end
+
+        def work
+            @request.execute!
         end
     end
 end
