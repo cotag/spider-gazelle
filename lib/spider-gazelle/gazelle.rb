@@ -9,17 +9,23 @@ module SpiderGazelle
         REQUEST_METHOD = 'REQUEST_METHOD'.freeze    # GET, POST, etc
 
 
-        def initialize(app, options)
-            @gazelle = Libuv::Loop.new
+        def set_instance_type(inst)
+            inst.type = :request
+        end
+        
+
+
+        def initialize(loop)
+            @gazelle = loop
             @connections = Set.new      # Set of active connections on this thread
             @parser_cache = []      	# Stale parser objects cached for reuse
-            @connection_queue = ::Libuv::Q::ResolvedPromise.new(@gazelle, true)
 
-            @app = app
-            @options = options
+            @app_cache = {}
+            @connection_queue = ::Libuv::Q::ResolvedPromise.new(@gazelle, true)
 
             # A single parser instance for processing requests for each gazelle
             @parser = ::HttpParser::Parser.new(self)
+            @set_instance_type = method(:set_instance_type)
 
             # Single progress callback for each gazelle
             @on_progress = method(:on_progress)
@@ -38,18 +44,14 @@ module SpiderGazelle
                 # A pipe used to forward connections to different threads
                 @socket_server = @gazelle.pipe(true)
                 @socket_server.connect(DELEGATE_PIPE) do
-                    @socket_server.progress do |data, socket|
-                        new_connection(socket)
-                    end
+                    @socket_server.progress &method(:new_connection)
                     @socket_server.start_read2
                 end
 
                 # A pipe used to signal various control commands (shutdown, etc)
                 @signal_server = @gazelle.pipe
                 @signal_server.connect(SIGNAL_PIPE) do
-                    @signal_server.progress do |data|
-                        process_signal(data)
-                    end
+                    @signal_server.progress &method(:process_signal)
                     @signal_server.start_read
                 end
             end
@@ -58,7 +60,7 @@ module SpiderGazelle
 
         # HTTP Parser callbacks:
         def on_message_begin(parser)
-            @connection.start_parsing(Request.new(@app, @options))
+            @connection.start_parsing
         end
 
         def on_url(parser, url)
@@ -114,23 +116,33 @@ module SpiderGazelle
             end
         end
 
-        def new_connection(socket)
+        def new_connection(data, socket)
+            # Data == "TLS_indicator Port APP_ID"
+            tls, port, app_id = data.split(' ', 3)
+            app = @app_cache[app_id.to_sym] ||= AppStore.get(app_id)
+            inst = @parser_cache.pop || ::HttpParser::Parser.new_instance(&@set_instance_type)
+
             # Keep track of the connection
-            connection = Connection.new @gazelle, socket, @connection_queue
+            connection = Connection.new @gazelle, socket, port, inst, app, @connection_queue
             @connections.add connection
             socket.storage = connection     # This allows us to re-use the one proc for parsing
 
             # process any data coming from the socket
             socket.progress @on_progress
+            if tls == 'T'
+                # TODO:: Allow some globals for supplying the certs
+                socket.start_tls(:server => true)
+            end
             socket.start_read
 
             # Remove connection if the socket closes
             socket.finally do
                 @connections.delete(connection)
+                @parser_cache << connection.state
             end
         end
 
-        def process_signal(data)
+        def process_signal(data, pipe)
             if data == Spider::KILL_GAZELLE
                 shutdown
             end
@@ -138,7 +150,10 @@ module SpiderGazelle
 
         def shutdown
             # TODO:: do this nicely
-            @gazelle.stop
+            # Need to signal the connections to close
+            @connection_queue.then do
+                @gazelle.stop
+            end
         end
     end
 end

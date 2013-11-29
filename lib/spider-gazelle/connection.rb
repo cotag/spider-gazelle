@@ -5,16 +5,13 @@ module SpiderGazelle
     class Connection
 
 
-        SET_INSTANCE_TYPE = proc {|inst| inst.type = :request}
-
-
         attr_reader :state, :parsing
         attr_accessor :queue_worker
 
 
-        def initialize(loop, socket, queue) # TODO:: port information
+        def initialize(loop, socket, port, state, app, queue)
             # A single parser instance per-connection (supports pipelining)
-            @state = ::HttpParser::Parser.new_instance &SET_INSTANCE_TYPE
+            @state = state
             @pending = []
 
             # Work callback for thread pool processing
@@ -32,12 +29,19 @@ module SpiderGazelle
             
             # Socket for writing the response
             @socket = socket
+            @app = app
+            @port = port
             @loop = loop
         end
 
+        # Lazy eval the IP
+        def remote_ip
+            @remote_ip ||= @socket.peername[0]
+        end
+
         # Creates a new request state object
-        def start_parsing(request)
-            @parsing = request
+        def start_parsing
+            @parsing = Request.new(remote_ip, @port, @app)
         end
 
         # Chains the work in a promise queue

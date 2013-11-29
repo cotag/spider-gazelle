@@ -6,23 +6,25 @@ require 'optparse'
 
 
 options = {
-    Host: "0.0.0.0",
-    Port: 3000,
+    host: "127.0.0.1",
+    port: 3000,
+    tls: false,
     environment: ENV['RACK_ENV'] || 'development',
-    rackup: "#{Dir.pwd}/config.ru"
+    rackup: "#{Dir.pwd}/config.ru",
+    quiet: false
 }
 
 parser = OptionParser.new do |opts|
     opts.on "-p", "--port PORT", Integer, "Define what port TCP port to bind to (default: 3000)" do |arg|
-        options[:Port] = arg
+        options[:port] = arg
     end
 
     opts.on "-a", "--address HOST", "bind to HOST address (default: 0.0.0.0)" do |arg|
-        options[:Host] = arg
+        options[:host] = arg
     end
 
-    opts.on "-q", "--quiet", "Quiet down the output" do
-        options[:Quiet] = true
+    opts.on "-q", "--quiet", "quiet down the output" do
+        options[:quiet] = true
     end
 
     opts.on "-e", "--environment ENVIRONMENT", "The environment to run the Rack app on (default: development)" do |arg|
@@ -50,15 +52,33 @@ unless File.exists?(options[:rackup])
     abort "No rackup found at #{options[:rackup]}"
 end
 
-app, rack_options = Rack::Builder.parse_file options[:rackup]
-server = ::SpiderGazelle::Spider.new(app, options)
+ENV['RACK_ENV'] = options[:environment].to_s if options[:environment]
 
-puts "Look out! Here comes Spider-Gazelle #{::SpiderGazelle::VERSION}!"
-puts "* Environment: #{ENV['RACK_ENV']}"
-puts "* Listening on tcp://#{options[:Host]}:#{options[:Port]}"
+loop = ::Libuv::Loop.default.run do |logger|
+    logger.progress do |level, errorid, error|
+        begin
+            p "Log called: #{level}: #{errorid}\n#{error.message}\n#{error.backtrace.join("\n")}\n"
+        rescue Exception
+            p 'error in gazelle logger'
+        end
+    end
 
-begin
-    server.run
-ensure
-    puts "Spider-Gazelle leaps through the veldt"
+    puts "Look out! Here comes Spider-Gazelle #{::SpiderGazelle::VERSION}!"
+    puts "* Environment: #{ENV['RACK_ENV']}"
+    server = ::SpiderGazelle::Spider.instance
+    server.loaded.then do
+        begin
+            puts "* Loading: #{options[:rackup]}"
+            server.load(options[:rackup], options).finally do
+                server.shutdown
+            end
+            puts "* Listening on tcp://#{options[:host]}:#{options[:port]}"
+
+        rescue Exception => e
+            puts "#{e}\n#{e.backtrace.join("\n")}\n"
+            server.shutdown
+        end
+    end
 end
+
+puts "\nSpider-Gazelle leaps through the veldt"

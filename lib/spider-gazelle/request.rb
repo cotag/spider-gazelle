@@ -5,8 +5,6 @@ require 'benchmark'
 module SpiderGazelle
     class Request
 
-        SERVER = 'SG'.freeze    # The server name
-
         # Based on http://rack.rubyforge.org/doc/SPEC.html
         PATH_INFO = 'PATH_INFO'.freeze              # Request path from the script name up
         QUERY_STRING = 'QUERY_STRING'.freeze        # portion of the request following a '?' (empty if none)
@@ -43,6 +41,7 @@ module SpiderGazelle
 
         SERVER_SOFTWARE   = 'SERVER_SOFTWARE'.freeze
         SERVER   = 'SpiderGazelle'.freeze
+        REMOTE_ADDR = 'REMOTE_ADDR'.freeze
 
 
         #
@@ -70,12 +69,14 @@ module SpiderGazelle
         attr_accessor :env, :url, :header, :body, :keep_alive, :upgrade, :response
 
 
-        def initialize(app, options)
-            @app, @options = app, options
+        def initialize(remote, port, app)
+            @app = app
             @body = ''
             @header = ''
             @url = ''
             @env = PROTO_ENV.dup
+            @env[SERVER_PORT] = port
+            @env[REMOTE_ADDR] = remote
         end
 
         def execute!
