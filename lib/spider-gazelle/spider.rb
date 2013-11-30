@@ -56,9 +56,9 @@ module SpiderGazelle
             ports = [ports] if ports.is_a? Hash
             ports << {} if ports.empty?
 
-            app_id = get_id_from(app)
-            if app_id != false
-                @web.schedule do
+            @web.schedule do
+                begin
+                    app_id = AppStore.load(app)
                     bindings = @bindings[app_id] ||= []
 
                     ports.each do |options|
@@ -71,25 +71,8 @@ module SpiderGazelle
                     else
                         defer.resolve(true)
                     end
-                end
-            end
-
-            defer.promise
-        end
-
-        # A thread safe method for unloading a rack app.
-        #
-        # @param app [String, Object] rackup filename or the rack app instance
-        # @return [::Libuv::Q::Promise] resolves once the app is loaded (and bound if SG is running)
-        def unload(app)
-            defer = @web.defer
-
-            app_id = get_id_from(app)
-            if app_id != false
-                @web.schedule do
-                    AppStore.delete(app_id)
-                    defer.resolve(stop(app, app_id))
-                    @bindings.delete(app_id)
+                rescue Exception => e
+                    defer.reject(e)
                 end
             end
 
@@ -102,9 +85,9 @@ module SpiderGazelle
         # @return [::Libuv::Q::Promise] resolves once the app is bound to the port
         def start(app, app_id = nil)
             defer = @web.defer
-            app_id = app_id || get_id_from(app)
+            app_id = app_id || AppStore.lookup(app)
 
-            if app_id != false && @status == :running
+            if app_id != nil && @status == :running
                 @web.schedule do
                     bindings = @bindings[app_id] ||= []
                     starting = []
@@ -114,6 +97,10 @@ module SpiderGazelle
                     end
                     defer.resolve(::Libuv::Q.all(@web, *starting))
                 end
+            elsif app_id.nil?
+                defer.reject('application not loaded')
+            else
+                defer.reject('server not running')
             end
 
             defer.promise
@@ -125,20 +112,23 @@ module SpiderGazelle
         # @return [::Libuv::Q::Promise] resolves once the app is no longer bound to the port
         def stop(app, app_id = nil)
             defer = @web.defer
-            app_id = app_id || get_id_from(app)
+            app_id = app_id || AppStore.lookup(app)
 
-            if app_id != false
+            if !app_id.nil?
                 @web.schedule do
                     bindings = @bindings[app_id]
                     closing = []
 
-                    if @status == :running && bindings != nil
+                    if bindings != nil
                         bindings.each do |binding|
-                            closing << binding.unbind
+                            result = binding.unbind
+                            closing << result unless result.nil?
                         end
                     end
                     defer.resolve(::Libuv::Q.all(@web, *closing))
                 end
+            else
+                defer.reject('application not loaded')
             end
 
             defer.promise
@@ -152,18 +142,6 @@ module SpiderGazelle
 
         protected
 
-
-        # Selects an appropriate app ID for the given app 
-        def get_id_from(app, defer = nil)
-            if File.exists? app.to_s
-                app
-            elsif app.respond_to? :call
-                app.__id__
-            else
-                defer.reject('invalid web application') unless defer.nil?
-                false
-            end
-        end
 
         # Called from the binding for sending to gazelles
         def delegate(client, tls, port, app_id)
@@ -249,7 +227,7 @@ module SpiderGazelle
                 # Update the state and close the socket
                 @status = :squashing
                 @bindings.each_key do |key|
-                    unload(key)
+                    stop(key)
                 end
 
                 # Signal all the gazelle to shutdown
