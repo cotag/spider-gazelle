@@ -54,10 +54,10 @@ end
 
 ENV['RACK_ENV'] = options[:environment].to_s if options[:environment]
 
-loop = ::Libuv::Loop.default.run do |logger|
+::Libuv::Loop.default.run do |logger|
     logger.progress do |level, errorid, error|
         begin
-            p "Log called: #{level}: #{errorid}\n#{error.message}\n#{error.backtrace.join("\n")}\n"
+            puts "Log called: #{level}: #{errorid}\n#{error.message}\n#{error.backtrace.join("\n")}\n"
         rescue Exception
             p 'error in gazelle logger'
         end
@@ -67,17 +67,13 @@ loop = ::Libuv::Loop.default.run do |logger|
     puts "* Environment: #{ENV['RACK_ENV']}"
     server = ::SpiderGazelle::Spider.instance
     server.loaded.then do
-        begin
-            puts "* Loading: #{options[:rackup]}"
-            server.load(options[:rackup], options).finally do
-                server.shutdown
-            end
-            puts "* Listening on tcp://#{options[:host]}:#{options[:port]}"
-
-        rescue Exception => e
-            puts "#{e}\n#{e.backtrace.join("\n")}\n"
+        puts "* Loading: #{options[:rackup]}"
+        server.load(options[:rackup], options).finally do
+            # This will execute if the TCP binding is lost
             server.shutdown
         end
+
+        puts "* Listening on tcp://#{options[:host]}:#{options[:port]}"
     end
 end
 

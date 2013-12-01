@@ -122,17 +122,19 @@ module SpiderGazelle
             app = @app_cache[app_id.to_sym] ||= AppStore.get(app_id)
             inst = @parser_cache.pop || ::HttpParser::Parser.new_instance(&@set_instance_type)
 
-            # Keep track of the connection
-            connection = Connection.new @gazelle, socket, port, inst, app, @connection_queue
-            @connections.add connection
-            socket.storage = connection     # This allows us to re-use the one proc for parsing
-
             # process any data coming from the socket
             socket.progress @on_progress
-            if tls == 'T'
+            encrypted = tls == 'T'
+            if encrypted
                 # TODO:: Allow some globals for supplying the certs
                 socket.start_tls(:server => true)
             end
+
+            # Keep track of the connection
+            connection = Connection.new @gazelle, socket, port, encrypted, inst, app, @connection_queue
+            @connections.add connection
+            socket.storage = connection     # This allows us to re-use the one proc for parsing
+
             socket.start_read
 
             # Remove connection if the socket closes

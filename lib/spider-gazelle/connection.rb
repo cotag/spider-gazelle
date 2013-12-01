@@ -9,7 +9,7 @@ module SpiderGazelle
         attr_accessor :queue_worker
 
 
-        def initialize(loop, socket, port, state, app, queue)
+        def initialize(loop, socket, port, tls, state, app, queue)
             # A single parser instance per-connection (supports pipelining)
             @state = state
             @pending = []
@@ -31,6 +31,7 @@ module SpiderGazelle
             @socket = socket
             @app = app
             @port = port
+            @tls = tls
             @loop = loop
         end
 
@@ -41,7 +42,7 @@ module SpiderGazelle
 
         # Creates a new request state object
         def start_parsing
-            @parsing = Request.new(remote_ip, @port, @app)
+            @parsing = Request.new(remote_ip, @port, @tls, @app)
         end
 
         # Chains the work in a promise queue

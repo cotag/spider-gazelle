@@ -14,6 +14,9 @@ module SpiderGazelle
         REQUEST_PATH = 'REQUEST_PATH'.freeze
         RACK_URLSCHEME = 'rack.url_scheme'.freeze   # http or https
         RACK_INPUT = 'rack.input'.freeze            # an IO like object containing all the request body
+        RACK_HIJACKABLE = 'rack.hijack?'.freeze     # hijacking IO is supported
+        RACK_HIJACK = 'rack.hijack'.freeze          # callback for indicating that this socket will be hijacked
+        RACK_HIJACK_IO = 'rack.hijack_io'.freeze    # the object for performing IO on after hijack is called
 
         GATEWAY_INTERFACE = "GATEWAY_INTERFACE".freeze
         CGI_VER = "CGI/1.2".freeze
@@ -59,7 +62,6 @@ module SpiderGazelle
             'SCRIPT_NAME'.freeze => ENV['SCRIPT_NAME'] || EMPTY,   #  The virtual path of the app base (empty if root)
             'CONTENT_TYPE'.freeze => 'text/plain',      # works with Rack and Rack::Lint (source puma)
             'SERVER_PROTOCOL'.freeze => HTTP_11,
-            RACK_URLSCHEME => HTTP_URL_SCHEME,          # TODO:: check for / support ssl
 
             GATEWAY_INTERFACE => CGI_VER,
             SERVER_SOFTWARE   => SERVER
@@ -69,7 +71,7 @@ module SpiderGazelle
         attr_accessor :env, :url, :header, :body, :keep_alive, :upgrade, :response
 
 
-        def initialize(remote, port, app)
+        def initialize(remote, port, tls, app)
             @app = app
             @body = ''
             @header = ''
@@ -77,6 +79,7 @@ module SpiderGazelle
             @env = PROTO_ENV.dup
             @env[SERVER_PORT] = port
             @env[REMOTE_ADDR] = remote
+            @env[RACK_URLSCHEME] = tls ? HTTPS_URL_SCHEME : HTTP_URL_SCHEME
         end
 
         def execute!
@@ -114,6 +117,12 @@ module SpiderGazelle
                 @env[SERVER_PORT] = PROTO_ENV[SERVER_PORT]
             end
 
+            # Provide hijack options if this is an upgrade request
+            if @upgrade == true
+                @env[RACK_HIJACKABLE] = true
+                @env[RACK_HIJACK] = method(:hijack)
+            end
+
             # Process the request
             #p @env
             status, headers, body = nil, nil, nil
@@ -146,6 +155,15 @@ module SpiderGazelle
 
             # TODO:: streaming responses (using async and a queue object?)
             @response = resp
+        end
+
+
+        protected
+
+
+        def hijack
+            @hijacked = true
+            @env[RACK_HIJACK_IO] = nil
         end
     end
 end

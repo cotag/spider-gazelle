@@ -2,36 +2,78 @@ require 'websocket/driver'
 
 
 module SpiderGazelle
-	class Websocket
-		attr_reader :env, :url, :driver, :socket
+    # TODO:: make a promise that resolves when closed
+    class Websocket < Q::DeferredPromise
+        attr_reader :env, :url, :driver, :socket
 
 
-		def initialize(tcp, env)
-			@socket, @env = tcp, env
+        def initialize(tcp, env)
+            @socket, @env = tcp, env
 
-			scheme = Rack::Request.new(env).ssl? ? 'wss://' : 'ws://'
-			@url = scheme + env['HTTP_HOST'] + env['REQUEST_URI']
-			@driver = ::WebSocket::Driver.rack(self)
+            # Initialise the promise
+            super(@socket.loop, @socket.loop.defer)
 
-			# Pass data from the socket to the driver
-			@socket.progress do |data|
-				@driver.parse(data)
-			end
+            scheme = env[Request::RACK_URLSCHEME] == HTTPS_URL_SCHEME ? 'wss://' : 'ws://'
+            @url = scheme + env[Request::HTTP_HOST] + env[Request::REQUEST_URI]
+            @driver = ::WebSocket::Driver.rack(self)
 
-			# Driver has indicated that it is closing
-			# We'll close the socket after writing any remaining data
-			@driver.on(:close) {
-				@socket.shutdown
-			}
-		end
+            # Pass data from the socket to the driver
+            @socket.progress &method(:socket_read)
+            @socket.finally &method(:socket_close)
 
-		def start
-			@driver.start
-			@socket.start_read
-		end
+            # Driver has indicated that it is closing
+            # We'll close the socket after writing any remaining data
+            @driver.on(:close) &method(:on_close)
+        end
 
-		def write(string)
-			@socket.write(string)
-		end
-	end
+        def start
+            @driver.start
+        end
+
+        def text(string)
+            @driver.text(string)
+        end
+
+        def binary(array)
+            driver.binary(array)
+        end
+
+        def progress(callback = nil, &blk)
+            @progress = callback || blk
+        end
+
+
+        def write(string)
+            @socket.write(string)
+        end
+
+
+        protected
+
+
+        def socket_read(data, tcp)
+            @driver.parse(data)
+        end
+
+        def socket_close
+            @defer.reject({
+                code: 1006,
+                reason: 'connection was closed abnormally'
+            })
+        end
+
+
+        def on_message(event)
+            @progress.call(event.data) unless @progress.nil?
+        end
+
+        def on_error(event)
+            @defer.reject(event)
+        end
+
+        def on_close
+            @socket.shutdown
+            @defer.resolve(:closed)
+        end
+    end
 end
