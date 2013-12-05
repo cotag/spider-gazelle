@@ -5,11 +5,28 @@ module SpiderGazelle
     class Connection
 
 
+        RACK = 'rack'.freeze            # used for filtering headers
+        CLOSE = "close".freeze
+        CONNECTION = "Connection".freeze
+        TRANSFER_ENCODING = "Transfer-Encoding".freeze
+        CHUNKED = "chunked".freeze
+        COLON_SPACE = ': '.freeze
+        EOF = "0\r\n\r\n".freeze
+        CRLF = "\r\n".freeze
+
+
+        def self.on_progress(data, socket); end
+        DUMMY_PROGRESS = self.method(:on_progress)
+        ASYNC_RESPONSE = [-1, :async]
+
+
+        # For Gazelle
         attr_reader :state, :parsing
-        attr_accessor :queue_worker
+        # For Request
+        attr_reader :port, :tls, :loop, :socket
 
 
-        def initialize(loop, socket, port, tls, state, app, queue)
+        def initialize(gazelle, loop, socket, port, state, app, queue)
             # A single parser instance per-connection (supports pipelining)
             @state = state
             @pending = []
@@ -31,8 +48,12 @@ module SpiderGazelle
             @socket = socket
             @app = app
             @port = port
-            @tls = tls
+            @tls = @socket.tls?
             @loop = loop
+            @gazelle = gazelle
+
+            # Remove connection if the socket closes
+            socket.finally &method(:unlink)
         end
 
         # Lazy eval the IP
@@ -42,7 +63,7 @@ module SpiderGazelle
 
         # Creates a new request state object
         def start_parsing
-            @parsing = Request.new(remote_ip, @port, @tls, @app)
+            @parsing = Request.new(self, @app)
         end
 
         # Chains the work in a promise queue
@@ -70,6 +91,11 @@ module SpiderGazelle
             end
         end
 
+        # Schedule send
+        def response(data)
+            @loop.schedule
+        end
+
 
         protected
 
@@ -77,12 +103,65 @@ module SpiderGazelle
         def send_response(result)
             # As we have come back from another thread the socket may have closed
             # This check is an optimisation, the call to write and shutdown would fail safely
-            if !@socket.closed
-                @socket.write @request.response
-                if @request.keep_alive == false
-                    @socket.shutdown
+
+            if @request.hijacked
+                unlink                                  # unlink the management of the socket
+                @request.hijacked.resolve([@socket])    # passes the socket to the captor in an array to prevent chaining
+
+            elsif !@socket.closed
+                status, headers, body = result
+
+                if ASYNC_RESPONSE.include? status
+                    # TODO:: wait for the response
+                    # return async.promise
+
+                else
+                    headers[CONNECTION] = CLOSE if @request.keep_alive == false
+                    headers[TRANSFER_ENCODING] = CHUNKED
+
+                    header = "HTTP/1.1 #{status}\r\n"
+                    headers.each do |key, value|
+                        next if key.start_with? RACK
+
+                        header << key
+                        header << COLON_SPACE
+                        header << value
+                        header << CRLF
+                    end
+                    header << CRLF
+                    @socket.write header
+
+                    # Stream the file if a file
+                    if body.respond_to? :to_path
+                        file = @loop.file(body.to_path, File::RDONLY)
+                        file.progress do
+                            file.send_file(@socket, :http).finally do 
+                                file.close
+                                if @request.keep_alive == false
+                                    @socket.shutdown
+                                end
+                            end
+                        end
+
+                        return file
+                    else
+                        # Stream the response
+                        body.each do |part|
+                            chunk = part.bytesize.to_s(16) << CRLF << part << CRLF
+                            @socket.write chunk
+                        end
+                        @socket.write EOF
+
+                        # TODO:: this probably needs to be resolved
+                        #body.close if body.respond_to?(:close)
+                    end
+                    
+                    if @request.keep_alive == false
+                        @socket.shutdown
+                    end
                 end
             end
+
             # continue processing (don't wait for write to complete)
             # if the write fails it will close the socket
             nil
@@ -102,8 +181,21 @@ module SpiderGazelle
             @current_worker.then @send_response, @send_error   # resolves the promise with a promise
         end
 
+        # returns the response as the result of the work
+        # We support the unofficial rack async api (multi-call)
         def work
-            @request.execute!
+            @request.response = catch(:async) {
+                @request.execute!
+            }
+        end
+
+        def unlink
+            if not @gazelle.nil?
+                @socket.progress &DUMMY_PROGRESS        # unlink the progress callback (prevent funny business)
+                @gazelle.discard(self)
+                @gazelle = nil
+                @state = nil
+            end
         end
     end
 end

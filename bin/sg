@@ -68,7 +68,9 @@ ENV['RACK_ENV'] = options[:environment].to_s if options[:environment]
     server = ::SpiderGazelle::Spider.instance
     server.loaded.then do
         puts "* Loading: #{options[:rackup]}"
-        server.load(options[:rackup], options).finally do
+        server.load(options[:rackup], options).catch(proc {|e|
+            puts "#{e.message}\n#{e.backtrace.join("\n")}\n"
+        }).finally do
             # This will execute if the TCP binding is lost
             server.shutdown
         end

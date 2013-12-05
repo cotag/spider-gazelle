@@ -3,7 +3,7 @@ require 'websocket/driver'
 
 module SpiderGazelle
     # TODO:: make a promise that resolves when closed
-    class Websocket < Q::DeferredPromise
+    class Websocket < ::Libuv::Q::DeferredPromise
         attr_reader :env, :url, :driver, :socket
 
 
@@ -13,7 +13,7 @@ module SpiderGazelle
             # Initialise the promise
             super(@socket.loop, @socket.loop.defer)
 
-            scheme = env[Request::RACK_URLSCHEME] == HTTPS_URL_SCHEME ? 'wss://' : 'ws://'
+            scheme = env[Request::RACK_URLSCHEME] == Request::HTTPS_URL_SCHEME ? 'wss://' : 'ws://'
             @url = scheme + env[Request::HTTP_HOST] + env[Request::REQUEST_URI]
             @driver = ::WebSocket::Driver.rack(self)
 
@@ -21,9 +21,12 @@ module SpiderGazelle
             @socket.progress &method(:socket_read)
             @socket.finally &method(:socket_close)
 
+
             # Driver has indicated that it is closing
             # We'll close the socket after writing any remaining data
-            @driver.on(:close) &method(:on_close)
+            @driver.on(:close, &method(:on_close))
+            @driver.on(:message, &method(:on_message))
+            @driver.on(:error, &method(:on_error))
         end
 
         def start
@@ -35,7 +38,7 @@ module SpiderGazelle
         end
 
         def binary(array)
-            driver.binary(array)
+            @driver.binary(array)
         end
 
         def progress(callback = nil, &blk)
@@ -64,16 +67,16 @@ module SpiderGazelle
 
 
         def on_message(event)
-            @progress.call(event.data) unless @progress.nil?
+            @progress.call(event.data, self) unless @progress.nil?
         end
 
         def on_error(event)
             @defer.reject(event)
         end
 
-        def on_close
+        def on_close(event)
             @socket.shutdown
-            @defer.resolve(:closed)
+            @defer.resolve(event)
         end
     end
 end

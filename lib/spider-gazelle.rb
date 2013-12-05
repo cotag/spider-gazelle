@@ -11,6 +11,8 @@ require "spider-gazelle/app_store"      # Holds references to the loaded rack ap
 require "spider-gazelle/binding"        # Holds a reference to a bound port and associated rack application
 require "spider-gazelle/spider"         # Accepts connections and offloads them to gazelles
 
+require "spider-gazelle/upgrades/websocket"  # Websocket implementation
+
 
 module SpiderGazelle
     # Delegate pipe used for passing sockets to the gazelles

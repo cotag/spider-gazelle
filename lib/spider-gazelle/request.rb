@@ -21,21 +21,16 @@ module SpiderGazelle
         GATEWAY_INTERFACE = "GATEWAY_INTERFACE".freeze
         CGI_VER = "CGI/1.2".freeze
 
-        RACK = 'rack'.freeze            # used for filtering headers
         EMPTY = ''.freeze
 
         HTTP_11 = 'HTTP/1.1'.freeze     # used in PROTO_ENV
         HTTP_URL_SCHEME = 'http'.freeze
         HTTPS_URL_SCHEME = 'https'.freeze
         HTTP_HOST = 'HTTP_HOST'.freeze
-        COLON_SPACE = ': '.freeze
-        CRLF = "\r\n".freeze
         LOCALHOST = 'localhost'.freeze
         
         CONTENT_LENGTH = "Content-Length".freeze
-        CONNECTION = "Connection".freeze
         KEEP_ALIVE = "Keep-Alive".freeze
-        CLOSE = "close".freeze
 
         HTTP_CONTENT_LENGTH = 'HTTP_CONTENT_LENGTH'.freeze
         HTTP_CONTENT_TYPE = 'HTTP_CONTENT_TYPE'.freeze
@@ -69,17 +64,19 @@ module SpiderGazelle
 
 
         attr_accessor :env, :url, :header, :body, :keep_alive, :upgrade, :response
+        attr_reader :hijacked
 
 
-        def initialize(remote, port, tls, app)
+        def initialize(connection, app)
             @app = app
             @body = ''
             @header = ''
             @url = ''
             @env = PROTO_ENV.dup
-            @env[SERVER_PORT] = port
-            @env[REMOTE_ADDR] = remote
-            @env[RACK_URLSCHEME] = tls ? HTTPS_URL_SCHEME : HTTP_URL_SCHEME
+            @loop = connection.loop
+            @env[SERVER_PORT] = connection.port
+            @env[REMOTE_ADDR] = connection.remote_ip
+            @env[RACK_URLSCHEME] = connection.tls ? HTTPS_URL_SCHEME : HTTP_URL_SCHEME
         end
 
         def execute!
@@ -123,6 +120,13 @@ module SpiderGazelle
                 @env[RACK_HIJACK] = method(:hijack)
             end
 
+            
+            result = @app.call(@env)
+            body = result[2]
+            body.close if body.respond_to?(:close)
+            result
+            
+=begin
             # Process the request
             #p @env
             status, headers, body = nil, nil, nil
@@ -155,6 +159,7 @@ module SpiderGazelle
 
             # TODO:: streaming responses (using async and a queue object?)
             @response = resp
+=end
         end
 
 
@@ -162,8 +167,8 @@ module SpiderGazelle
 
 
         def hijack
-            @hijacked = true
-            @env[RACK_HIJACK_IO] = nil
+            @hijacked = @loop.defer()
+            @env[RACK_HIJACK_IO] = @hijacked.promise
         end
     end
 end

@@ -9,6 +9,9 @@ module SpiderGazelle
         REQUEST_METHOD = 'REQUEST_METHOD'.freeze    # GET, POST, etc
 
 
+        attr_reader :parser_cache, :connections
+
+
         def set_instance_type(inst)
             inst.type = :request
         end
@@ -102,6 +105,11 @@ module SpiderGazelle
             @connection.finished_parsing
         end
 
+        def discard(connection)
+            @connections.delete(connection)
+            @parser_cache << connection.state
+        end
+
 
         protected
 
@@ -124,24 +132,17 @@ module SpiderGazelle
 
             # process any data coming from the socket
             socket.progress @on_progress
-            encrypted = tls == 'T'
-            if encrypted
+            if tls == 'T'
                 # TODO:: Allow some globals for supplying the certs
                 socket.start_tls(:server => true)
             end
 
             # Keep track of the connection
-            connection = Connection.new @gazelle, socket, port, encrypted, inst, app, @connection_queue
+            connection = Connection.new self, @gazelle, socket, port, inst, app, @connection_queue
             @connections.add connection
             socket.storage = connection     # This allows us to re-use the one proc for parsing
 
             socket.start_read
-
-            # Remove connection if the socket closes
-            socket.finally do
-                @connections.delete(connection)
-                @parser_cache << connection.state
-            end
         end
 
         def process_signal(data, pipe)
@@ -153,9 +154,7 @@ module SpiderGazelle
         def shutdown
             # TODO:: do this nicely
             # Need to signal the connections to close
-            @connection_queue.then do
-                @gazelle.stop
-            end
+            @gazelle.stop
         end
     end
 end

@@ -152,14 +152,6 @@ module SpiderGazelle
 
         # Triggers the creation of gazelles
         def reanimate(logger)
-            logger.progress do |level, errorid, error|
-                begin
-                    p "Log called: #{level}: #{errorid}\n#{error.message}\n#{error.backtrace.join("\n")}\n"
-                rescue Exception
-                    p 'error in gazelle logger'
-                end
-            end
-
             # Manage the set of Gazelle socket listeners
             @threads = Set.new
             cpus = ::Libuv.cpu_count || 1
