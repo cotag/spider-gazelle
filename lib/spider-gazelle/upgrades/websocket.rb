@@ -59,10 +59,9 @@ module SpiderGazelle
         end
 
         def socket_close
-            @defer.reject({
-                code: 1006,
-                reason: 'connection was closed abnormally'
-            })
+            if @shutdown_called.nil?
+                @defer.reject(WebSocket::Driver::CloseEvent.new(1006, 'connection was closed unexpectedly'))
+            end
         end
 
 
@@ -75,6 +74,7 @@ module SpiderGazelle
         end
 
         def on_close(event)
+            @shutdown_called = true
             @socket.shutdown
             @defer.resolve(event)
         end

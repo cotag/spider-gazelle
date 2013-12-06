@@ -8,6 +8,7 @@ module SpiderGazelle
         RACK = 'rack'.freeze            # used for filtering headers
         CLOSE = "close".freeze
         CONNECTION = "Connection".freeze
+        CONTENT_LENGTH = "Content-Length".freeze
         TRANSFER_ENCODING = "Transfer-Encoding".freeze
         CHUNKED = "chunked".freeze
         COLON_SPACE = ': '.freeze
@@ -118,6 +119,7 @@ module SpiderGazelle
                 else
                     headers[CONNECTION] = CLOSE if @request.keep_alive == false
                     headers[TRANSFER_ENCODING] = CHUNKED
+                    headers.delete(CONTENT_LENGTH)  # not require for chunked content
 
                     header = "HTTP/1.1 #{status}\r\n"
                     headers.each do |key, value|
@@ -134,8 +136,8 @@ module SpiderGazelle
                     # Stream the file if a file
                     if body.respond_to? :to_path
                         file = @loop.file(body.to_path, File::RDONLY)
-                        file.progress do
-                            file.send_file(@socket, :http).finally do 
+                        file.progress do    # File is open and available for reading
+                            file.send_file(@socket, :http).finally do
                                 file.close
                                 if @request.keep_alive == false
                                     @socket.shutdown
@@ -152,7 +154,9 @@ module SpiderGazelle
                         end
                         @socket.write EOF
 
-                        # TODO:: this probably needs to be resolved
+                        # TODO:: we are doing this in the response thread
+                        #   as we cannot unlock a rack mutex in this thread
+                        #   it seems not to matter
                         #body.close if body.respond_to?(:close)
                     end
                     
@@ -168,11 +172,10 @@ module SpiderGazelle
         end
 
         def send_error(reason)
-            p "send error: #{reason.message}\n#{reason.backtrace.join("\n")}\n"
-            # log error reason
-            # TODO:: send response (500 internal error)
-            # no need to close the socket as this isn't fatal
-            nil
+            puts "send error: #{reason.message}\n#{reason.backtrace.join("\n")}\n"
+            # TODO:: log error reason
+            # Close the socket as this is fatal (file read error, gazelle error etc)
+            @socket.close
         end
 
         def process_next(result)

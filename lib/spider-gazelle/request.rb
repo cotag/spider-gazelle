@@ -29,7 +29,6 @@ module SpiderGazelle
         HTTP_HOST = 'HTTP_HOST'.freeze
         LOCALHOST = 'localhost'.freeze
         
-        CONTENT_LENGTH = "Content-Length".freeze
         KEEP_ALIVE = "Keep-Alive".freeze
 
         HTTP_CONTENT_LENGTH = 'HTTP_CONTENT_LENGTH'.freeze
