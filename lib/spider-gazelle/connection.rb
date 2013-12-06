@@ -118,26 +118,21 @@ module SpiderGazelle
 
                 else
                     headers[CONNECTION] = CLOSE if @request.keep_alive == false
-                    headers[TRANSFER_ENCODING] = CHUNKED
-                    headers.delete(CONTENT_LENGTH)  # not require for chunked content
-
-                    header = "HTTP/1.1 #{status}\r\n"
-                    headers.each do |key, value|
-                        next if key.start_with? RACK
-
-                        header << key
-                        header << COLON_SPACE
-                        header << value
-                        header << CRLF
-                    end
-                    header << CRLF
-                    @socket.write header
 
                     # Stream the file if a file
                     if body.respond_to? :to_path
+                        if headers[CONTENT_LENGTH]
+                            type = :raw
+                        else
+                            type = :http
+                            headers[TRANSFER_ENCODING] = CHUNKED
+                        end
+
+                        write_headers(status, headers)
+
                         file = @loop.file(body.to_path, File::RDONLY)
                         file.progress do    # File is open and available for reading
-                            file.send_file(@socket, :http).finally do
+                            file.send_file(@socket, type).finally do
                                 file.close
                                 if @request.keep_alive == false
                                     @socket.shutdown
@@ -147,21 +142,34 @@ module SpiderGazelle
 
                         return file
                     else
-                        # Stream the response
-                        body.each do |part|
-                            chunk = part.bytesize.to_s(16) << CRLF << part << CRLF
-                            @socket.write chunk
+                        if headers[CONTENT_LENGTH]
+                            write_headers(status, headers)
+
+                            # Stream the response
+                            body.each do |part|
+                                @socket.write part
+                            end
+                        else
+                            headers[TRANSFER_ENCODING] = CHUNKED
+                            write_headers(status, headers)
+
+                            # Stream the response
+                            body.each do |part|
+                                chunk = part.bytesize.to_s(16) << CRLF << part << CRLF
+                                @socket.write chunk
+                            end
+                            @socket.write EOF
                         end
-                        @socket.write EOF
 
                         # TODO:: we are doing this in the response thread
                         #   as we cannot unlock a rack mutex in this thread
                         #   it seems not to matter
                         #body.close if body.respond_to?(:close)
-                    end
-                    
-                    if @request.keep_alive == false
-                        @socket.shutdown
+
+                        # Close the connection if required
+                        if @request.keep_alive == false
+                            @socket.shutdown
+                        end
                     end
                 end
             end
@@ -169,6 +177,20 @@ module SpiderGazelle
             # continue processing (don't wait for write to complete)
             # if the write fails it will close the socket
             nil
+        end
+
+        def write_headers(status, headers)
+            header = "HTTP/1.1 #{status}\r\n"
+            headers.each do |key, value|
+                next if key.start_with? RACK
+
+                header << key
+                header << COLON_SPACE
+                header << value
+                header << CRLF
+            end
+            header << CRLF
+            @socket.write header
         end
 
         def send_error(reason)
