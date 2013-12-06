@@ -1,5 +1,4 @@
 require 'stringio'
-require 'benchmark'
 
 
 module SpiderGazelle
@@ -119,46 +118,12 @@ module SpiderGazelle
                 @env[RACK_HIJACK] = method(:hijack)
             end
 
-            
+            # Execute the request then close the body
+            # NOTE:: closing the body here might cause issues (see connection.rb)
             result = @app.call(@env)
             body = result[2]
             body.close if body.respond_to?(:close)
             result
-            
-=begin
-            # Process the request
-            #p @env
-            status, headers, body = nil, nil, nil
-            puts Benchmark.measure {
-                status, headers, body = @app.call(@env)
-            }
-            # TODO:: check if upgrades were handled here (hijack_io)
-            
-            # Collect the body
-            resp_body = ''
-            body.each do |val|
-                resp_body << val
-            end
-
-            # Build the response
-            resp = "HTTP/1.1 #{status}\r\n"
-            headers[CONTENT_LENGTH] = resp_body.size.to_s           # ensure correct size
-            headers[CONNECTION] = CLOSE if @keep_alive == false     # ensure appropriate keep alive is set (http 1.1 way)
-
-            headers.each do |key, value|
-                next if key.start_with? RACK
-
-                resp << key
-                resp << COLON_SPACE
-                resp << value
-                resp << CRLF
-            end
-            resp << CRLF
-            resp << resp_body
-
-            # TODO:: streaming responses (using async and a queue object?)
-            @response = resp
-=end
         end
 
 

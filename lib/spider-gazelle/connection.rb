@@ -3,6 +3,7 @@ require 'stringio'
 
 module SpiderGazelle
     class Connection
+        Hijack = Struct.new(:socket, :env)
 
 
         RACK = 'rack'.freeze            # used for filtering headers
@@ -106,8 +107,12 @@ module SpiderGazelle
             # This check is an optimisation, the call to write and shutdown would fail safely
 
             if @request.hijacked
-                unlink                                  # unlink the management of the socket
-                @request.hijacked.resolve([@socket])    # passes the socket to the captor in an array to prevent chaining
+                unlink              # unlink the management of the socket
+                        
+                # Pass the hijack response to the captor using the promise
+                # This forwards the socket and environment as well as moving
+                #  continued execution onto the event loop.
+                @request.hijacked.resolve(Hijack.new(@socket, @request.env))
 
             elsif !@socket.closed
                 status, headers, body = result
@@ -119,7 +124,7 @@ module SpiderGazelle
                 else
                     headers[CONNECTION] = CLOSE if @request.keep_alive == false
 
-                    # Stream the file if a file
+                    # If a file, stream the body in a non-blocking fashion
                     if body.respond_to? :to_path
                         if headers[CONTENT_LENGTH]
                             type = :raw
@@ -163,8 +168,8 @@ module SpiderGazelle
 
                         # TODO:: we are doing this in the response thread
                         #   as we cannot unlock a rack mutex in this thread
-                        #   it seems not to matter
-                        #body.close if body.respond_to?(:close)
+                        #   it seems not to matter that we do this here
+                        # body.close if body.respond_to?(:close)
 
                         # Close the connection if required
                         if @request.keep_alive == false
