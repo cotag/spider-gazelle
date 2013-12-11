@@ -64,7 +64,7 @@ ENV['RACK_ENV'] = options[:environment].to_s if options[:environment]
     end
 
     puts "Look out! Here comes Spider-Gazelle #{::SpiderGazelle::VERSION}!"
-    puts "* Environment: #{ENV['RACK_ENV']}"
+    puts "* Environment: #{ENV['RACK_ENV']} on #{RUBY_ENGINE || 'ruby'} #{RUBY_VERSION}"
     server = ::SpiderGazelle::Spider.instance
     server.loaded.then do
         puts "* Loading: #{options[:rackup]}"

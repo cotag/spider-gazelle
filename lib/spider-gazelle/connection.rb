@@ -16,16 +16,17 @@ module SpiderGazelle
         EOF = "0\r\n\r\n".freeze
         CRLF = "\r\n".freeze
 
+        HTTP_11_400 = "HTTP/1.1 400 Bad Request\r\n\r\n".freeze
+
 
         def self.on_progress(data, socket); end
         DUMMY_PROGRESS = self.method(:on_progress)
-        ASYNC_RESPONSE = [-1, :async]
 
 
         # For Gazelle
         attr_reader :state, :parsing
         # For Request
-        attr_reader :port, :tls, :loop, :socket
+        attr_reader :tls, :port, :loop, :socket, :async_callback
 
 
         def initialize(gazelle, loop, socket, port, state, app, queue)
@@ -43,6 +44,7 @@ module SpiderGazelle
 
             # Used to chain promises (ensures requests are processed in order)
             @process_next = method(:process_next)
+            @write_chunk = method(:write_chunk)
             @current_worker = queue # keep track of work queue head to prevent unintentional GC
             @queue_worker = queue   # start queue with an existing resolved promise (::Libuv::Q::ResolvedPromise.new(@loop, true))
             
@@ -53,6 +55,7 @@ module SpiderGazelle
             @tls = @socket.tls?
             @loop = loop
             @gazelle = gazelle
+            @async_callback = method(:deferred_callback)
 
             # Remove connection if the socket closes
             socket.finally &method(:unlink)
@@ -81,14 +84,15 @@ module SpiderGazelle
 
         # The parser encountered an error
         def parsing_error
-            # TODO::log error (available in the @request object)
-            p "parsing error #{@state.error}"
+            # Grab the error
+            send_error(@state.error)
 
             # We no longer care for any further requests from this client
             # however we will finish processing any valid pipelined requests before shutting down
             @socket.stop_read
             @queue_worker = @queue_worker.then do
                 # TODO:: send response (400 bad request)
+                @socket.write HTTP_11_400
                 @socket.shutdown
             end
         end
@@ -100,6 +104,50 @@ module SpiderGazelle
 
 
         protected
+
+
+        # --------------
+        # State handlers:
+        # --------------
+
+
+        # Called when an error occurs at any point while responding
+        def send_error(reason)
+            puts "send error: #{reason.message}\n#{reason.backtrace.join("\n")}\n"
+            # TODO:: log error reason
+            # Close the socket as this is fatal (file read error, gazelle error etc)
+            @socket.close
+        end
+
+        # We use promise chaining to move the requests forward
+        # This provides an elegant way to handle persistent and pipelined connections
+        def process_next(result)
+            @request = @pending.shift
+            @current_worker = @loop.work @work
+            @current_worker.then @send_response, @send_error   # resolves the promise with a promise
+        end
+
+        # returns the response as the result of the work
+        # We support the unofficial rack async api (multi-call version for chunked responses)
+        def work
+            @request.execute!
+        end
+
+        # Unlinks the connection from the rack app
+        # This occurs when requested and when the socket closes
+        def unlink
+            if not @gazelle.nil?
+                @socket.progress &DUMMY_PROGRESS        # unlink the progress callback (prevent funny business)
+                @gazelle.discard(self)
+                @gazelle = nil
+                @state = nil
+            end
+        end
+
+
+        # ----------------------
+        # Core response handlers:
+        # ----------------------
 
 
         def send_response(result)
@@ -115,17 +163,30 @@ module SpiderGazelle
                 @request.hijacked.resolve(Hijack.new(@socket, @request.env))
 
             elsif !@socket.closed
-                status, headers, body = result
+                if @request.deferred
+                    # Wait for the response using this promise
+                    promise = @request.deferred.promise
 
-                if ASYNC_RESPONSE.include? status
-                    # TODO:: wait for the response
-                    # return async.promise
+                    # Process any responses that might have made it here first
+                    if @deferred_responses
+                        @deferred_responses.each &method(:respond_with)
+                        @deferred_responses = nil
+                    end
 
-                else
-                    headers[CONNECTION] = CLOSE if @request.keep_alive == false
+                    return promise
+
+                # NOTE:: Somehow getting to here with a nil request... needs investigation
+                elsif not result.nil?
+                    # clear any cached responses just in case
+                    # could be set by error in the rack application
+                    @deferred_responses = nil if @deferred_responses
+
+                    status, headers, body = result
 
                     # If a file, stream the body in a non-blocking fashion
                     if body.respond_to? :to_path
+                        headers[CONNECTION] = CLOSE if @request.keep_alive == false
+
                         if headers[CONTENT_LENGTH]
                             type = :raw
                         else
@@ -147,34 +208,7 @@ module SpiderGazelle
 
                         return file
                     else
-                        if headers[CONTENT_LENGTH]
-                            write_headers(status, headers)
-
-                            # Stream the response
-                            body.each do |part|
-                                @socket.write part
-                            end
-                        else
-                            headers[TRANSFER_ENCODING] = CHUNKED
-                            write_headers(status, headers)
-
-                            # Stream the response
-                            body.each do |part|
-                                chunk = part.bytesize.to_s(16) << CRLF << part << CRLF
-                                @socket.write chunk
-                            end
-                            @socket.write EOF
-                        end
-
-                        # TODO:: we are doing this in the response thread
-                        #   as we cannot unlock a rack mutex in this thread
-                        #   it seems not to matter that we do this here
-                        # body.close if body.respond_to?(:close)
-
-                        # Close the connection if required
-                        if @request.keep_alive == false
-                            @socket.shutdown
-                        end
+                        write_response(status, headers, body)
                     end
                 end
             end
@@ -182,6 +216,37 @@ module SpiderGazelle
             # continue processing (don't wait for write to complete)
             # if the write fails it will close the socket
             nil
+        end
+
+        def write_response(status, headers, body)
+            headers[CONNECTION] = CLOSE if @request.keep_alive == false
+
+            if headers[CONTENT_LENGTH]
+                write_headers(status, headers)
+
+                # Stream the response (pass directly into @socket.write)
+                body.each &@socket.method(:write)
+
+                if @request.deferred
+                    @request.deferred.resolve(true)
+                    @request.deferred = nil # prevent data being sent after completed
+                end
+
+                @socket.shutdown if @request.keep_alive == false
+            else
+                headers[TRANSFER_ENCODING] = CHUNKED
+                write_headers(status, headers)
+
+                # Stream the response
+                body.each &@write_chunk
+
+                if @request.deferred.nil?
+                    @socket.write EOF
+                    @socket.shutdown if @request.keep_alive == false
+                else
+                    @async_state = :chunked
+                end
+            end
         end
 
         def write_headers(status, headers)
@@ -198,34 +263,66 @@ module SpiderGazelle
             @socket.write header
         end
 
-        def send_error(reason)
-            puts "send error: #{reason.message}\n#{reason.backtrace.join("\n")}\n"
-            # TODO:: log error reason
-            # Close the socket as this is fatal (file read error, gazelle error etc)
-            @socket.close
+        def write_chunk(part)
+            chunk = part.bytesize.to_s(16) << CRLF << part << CRLF
+            @socket.write chunk
         end
 
-        def process_next(result)
-            @request = @pending.shift
-            @current_worker = @loop.work @work
-            @current_worker.then @send_response, @send_error   # resolves the promise with a promise
-        end
 
-        # returns the response as the result of the work
-        # We support the unofficial rack async api (multi-call)
-        def work
-            @request.response = catch(:async) {
-                @request.execute!
-            }
-        end
+        # ------------------------
+        # Async response functions:
+        # ------------------------
 
-        def unlink
-            if not @gazelle.nil?
-                @socket.progress &DUMMY_PROGRESS        # unlink the progress callback (prevent funny business)
-                @gazelle.discard(self)
-                @gazelle = nil
-                @state = nil
+
+        # Callback from a response that was marked async
+        def deferred_callback(data)
+            # We call close here, like on a regular response
+            body = data[2]
+            body.close if body.respond_to?(:close)
+            @loop.next_tick do
+                callback(data)
             end
+        end
+
+        # Process a response that was marked as async
+        # Save the data if the request hasn't responded yet
+        def callback(data)
+            begin
+                if @request.deferred && @deferred_responses.nil?
+                    respond_with(data)
+                else
+                    @deferred_responses ||= []
+                    @deferred_responses << data
+                end
+            rescue Exception => e
+                # This provides the same level of protection that
+                #  the regular responses provide
+                send_error(e)
+            end
+        end
+
+        # Process the async request in the same way as Mizuno
+        # See: http://polycrystal.org/2012/04/15/asynchronous_responses_in_rack.html
+        def respond_with(data)
+            status, headers, body = data
+
+            if @async_state.nil?
+                # Respond with the headers here
+                write_response(status, headers, body)
+            elsif body.empty?
+                @socket.write EOF
+                @socket.shutdown if @request.keep_alive == false
+
+                # Complete the request here
+                deferred = @request.deferred
+                @request.deferred = nil # prevent data being sent after completed
+                @async_state = nil
+                deferred.resolve(true)
+            else
+                # Send the chunks provided
+                body.each &@write_chunk
+            end
+            nil
         end
     end
 end

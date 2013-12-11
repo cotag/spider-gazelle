@@ -16,6 +16,7 @@ module SpiderGazelle
         RACK_HIJACKABLE = 'rack.hijack?'.freeze     # hijacking IO is supported
         RACK_HIJACK = 'rack.hijack'.freeze          # callback for indicating that this socket will be hijacked
         RACK_HIJACK_IO = 'rack.hijack_io'.freeze    # the object for performing IO on after hijack is called
+        RACK_ASYNC = 'async.callback'.freeze
 
         GATEWAY_INTERFACE = "GATEWAY_INTERFACE".freeze
         CGI_VER = "CGI/1.2".freeze
@@ -61,8 +62,8 @@ module SpiderGazelle
         }
 
 
-        attr_accessor :env, :url, :header, :body, :keep_alive, :upgrade, :response
-        attr_reader :hijacked
+        attr_accessor :env, :url, :header, :body, :keep_alive, :upgrade, :deferred 
+        attr_reader :hijacked, :response
 
 
         def initialize(connection, app)
@@ -70,11 +71,13 @@ module SpiderGazelle
             @body = ''
             @header = ''
             @url = ''
+            @execute = method(:execute)
             @env = PROTO_ENV.dup
             @loop = connection.loop
             @env[SERVER_PORT] = connection.port
             @env[REMOTE_ADDR] = connection.remote_ip
             @env[RACK_URLSCHEME] = connection.tls ? HTTPS_URL_SCHEME : HTTP_URL_SCHEME
+            @env[RACK_ASYNC] = connection.async_callback
         end
 
         def execute!
@@ -118,20 +121,29 @@ module SpiderGazelle
                 @env[RACK_HIJACK] = method(:hijack)
             end
 
-            # Execute the request then close the body
-            # NOTE:: closing the body here might cause issues (see connection.rb)
-            result = @app.call(@env)
-            body = result[2]
-            body.close if body.respond_to?(:close)
-            result
+            # Execute the request
+            @response = catch(:async, &@execute)
+            if @response.nil? || @response[0] == -1
+                @deferred = @loop.defer
+            end
+            @response
         end
 
 
         protected
 
 
+        # Execute the request then close the body
+        # NOTE:: closing the body here might cause issues (see connection.rb)
+        def execute(*args)
+            result = @app.call(@env)
+            body = result[2]
+            body.close if body.respond_to?(:close)
+            result
+        end
+
         def hijack
-            @hijacked = @loop.defer()
+            @hijacked = @loop.defer
             @env[RACK_HIJACK_IO] = @hijacked.promise
         end
     end
