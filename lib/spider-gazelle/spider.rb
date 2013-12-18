@@ -16,7 +16,7 @@ module SpiderGazelle
         MODES = [:thread, :process]    # TODO:: implement process
 
 
-        attr_reader :state, :threads
+        attr_reader :state, :mode, :threads
 
 
         def initialize
@@ -27,6 +27,7 @@ module SpiderGazelle
                 # id => [bind1, bind2]
             }
             @delegate = method(:delegate)
+            @squash = method(:squash)
 
             # Keep track of the loading process
             @waiting_gazelle = 0
@@ -35,7 +36,17 @@ module SpiderGazelle
             # Spider always runs on the default loop
             @web = ::Libuv::Loop.default
             @gazelles_loaded = @web.defer
-            @web.run &method(:reanimate)
+
+            # Start the server
+            if @web.reactor_running?
+                # Call run so we can be notified of errors
+                @web.run &method(:reanimate)
+            else
+                # Don't block on this thread if default reactor not running
+                Thread.new do
+                    @web.run &method(:reanimate)
+                end
+            end
         end
 
         # Provides a promise that resolves when we are read to start binding applications
@@ -136,7 +147,7 @@ module SpiderGazelle
 
         # Signals spider gazelle to shutdown gracefully
         def shutdown
-            @squash.call
+            @signal_squash.call
         end
 
 
@@ -145,7 +156,7 @@ module SpiderGazelle
 
         # Called from the binding for sending to gazelles
         def delegate(client, tls, port, app_id)
-            indicator = tls == true ? USE_TLS : NO_TLS
+            indicator = tls ? USE_TLS : NO_TLS
             loop = @select_handler.next
             loop.write2(client, "#{indicator} #{port} #{app_id}")
         end
@@ -168,7 +179,7 @@ module SpiderGazelle
             @accept_gazella = method(:accept_gazella)
 
             # Create a function for stopping the spider from another thread
-            @squash = @web.async &method(:squash)
+            @signal_squash = @web.async @squash
 
             # Bind the pipe for sending sockets to gazelle
             begin
@@ -203,9 +214,7 @@ module SpiderGazelle
             end
 
             # Signal gazelle death here
-            @web.signal(:INT) do
-                squash
-            end
+            @web.signal :INT, @squash
 
             # Update state only once the event loop is ready
             @gazelles_loaded.promise
@@ -213,7 +222,7 @@ module SpiderGazelle
 
         # Triggers a shutdown of the gazelles.
         # We ensure the process is running here as signals can be called multiple times
-        def squash
+        def squash(*args)
             if @status == :running
 
                 # Update the state and close the socket
