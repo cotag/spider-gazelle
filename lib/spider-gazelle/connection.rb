@@ -7,11 +7,11 @@ module SpiderGazelle
 
 
         RACK = 'rack'.freeze            # used for filtering headers
-        CLOSE = "close".freeze
-        CONNECTION = "Connection".freeze
-        CONTENT_LENGTH = "Content-Length".freeze
-        TRANSFER_ENCODING = "Transfer-Encoding".freeze
-        CHUNKED = "chunked".freeze
+        CLOSE = 'close'.freeze
+        CONNECTION = 'Connection'.freeze
+        CONTENT_LENGTH = 'Content-Length'.freeze
+        TRANSFER_ENCODING = 'Transfer-Encoding'.freeze
+        CHUNKED = 'chunked'.freeze
         COLON_SPACE = ': '.freeze
         EOF = "0\r\n\r\n".freeze
         CRLF = "\r\n".freeze
@@ -222,6 +222,7 @@ module SpiderGazelle
             headers[CONNECTION] = CLOSE if @request.keep_alive == false
 
             if headers[CONTENT_LENGTH]
+                headers[CONTENT_LENGTH] = headers[CONTENT_LENGTH].to_s
                 write_headers(status, headers)
 
                 # Stream the response (pass directly into @socket.write)
