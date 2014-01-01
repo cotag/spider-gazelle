@@ -34,11 +34,17 @@ module SpiderGazelle
         end
 
         def text(string)
-            @driver.text(string)
+            data = string.to_s
+            @loop.schedule do
+                @driver.text(data)
+            end
         end
 
         def binary(array)
-            @driver.binary(array)
+            data = array.to_a
+            @loop.schedule do
+                @driver.binary(data)
+            end
         end
 
         def progress(callback = nil, &blk)
@@ -46,8 +52,8 @@ module SpiderGazelle
         end
 
 
-        def write(string)
-            @socket.write(string)
+        def write(data)
+            @socket.write(data)
         end
 
 
