@@ -18,11 +18,12 @@ module SpiderGazelle
         
 
 
-        def initialize(loop, logger)
+        def initialize(loop, logger, mode)
             @gazelle = loop
             @connections = Set.new      # Set of active connections on this thread
             @parser_cache = []      	# Stale parser objects cached for reuse
 
+            @mode = mode
             @logger = logger
             @app_cache = {}
             @connection_queue = ::Libuv::Q::ResolvedPromise.new(@gazelle, true)
@@ -47,18 +48,20 @@ module SpiderGazelle
                     end
                 end
 
-                # A pipe used to forward connections to different threads
-                @socket_server = @gazelle.pipe(true)
-                @socket_server.connect(DELEGATE_PIPE) do
-                    @socket_server.progress &method(:new_connection)
-                    @socket_server.start_read2
-                end
+                unless @mode == :no_ipc
+                    # A pipe used to forward connections to different threads
+                    @socket_server = @gazelle.pipe(true)
+                    @socket_server.connect(DELEGATE_PIPE) do
+                        @socket_server.progress &method(:new_connection)
+                        @socket_server.start_read2
+                    end
 
-                # A pipe used to signal various control commands (shutdown, etc)
-                @signal_server = @gazelle.pipe
-                @signal_server.connect(SIGNAL_PIPE) do
-                    @signal_server.progress &method(:process_signal)
-                    @signal_server.start_read
+                    # A pipe used to signal various control commands (shutdown, etc)
+                    @signal_server = @gazelle.pipe
+                    @signal_server.connect(SIGNAL_PIPE) do
+                        @signal_server.progress &method(:process_signal)
+                        @signal_server.start_read
+                    end
                 end
             end
         end

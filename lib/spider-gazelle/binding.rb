@@ -37,9 +37,9 @@ module SpiderGazelle
             @tcp.bind(@options[:host], @port, @new_connection)
             @tcp.listen(@options[:backlog])
 
-            # TODO:: spider should deal with the errors
+            # Delegate errors
             @tcp.catch do |e|
-                p "tcp bind error: #{e}"
+                @loop.log :error, 'application bind failed', e
             end
             @tcp
         end

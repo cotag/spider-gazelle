@@ -15,7 +15,7 @@ module SpiderGazelle
         KILL_GAZELLE = 'k'.freeze
 
         STATES = [:reanimating, :running, :squashing, :dead]
-        MODES = [:thread, :process]    # TODO:: implement process
+        MODES = [:thread, :process, :no_ipc]    # TODO:: implement clustering using processes
 
 
         attr_reader :state, :mode, :threads, :logger
@@ -24,11 +24,18 @@ module SpiderGazelle
         def initialize
             # Threaded mode by default
             @status = :reanimating
-            @mode = :thread
             @bindings = {
                 # id => [bind1, bind2]
             }
-            @delegate = method(:delegate)
+
+            mode = ENV['SG_MODE'] || :thread
+            @mode = mode.to_sym
+
+            if @mode == :no_ipc
+                @delegate = method(:direct_delegate)
+            else
+                @delegate = method(:delegate)
+            end
             @squash = method(:squash)
 
 
@@ -171,13 +178,24 @@ module SpiderGazelle
             loop.write2(client, "#{indicator} #{port} #{app_id}")
         end
 
+        def direct_delegate(client, tls, port, app_id)
+            indicator = tls ? USE_TLS : NO_TLS
+            @gazelle.__send__(:new_connection, "#{indicator} #{port} #{app_id}", client)
+        end
+
         # Triggers the creation of gazelles
         def reanimate(logger)
             # Manage the set of Gazelle socket listeners
             @threads = Set.new
-            cpus = ::Libuv.cpu_count || 1
-            cpus.times do
-                @threads << Libuv::Loop.new
+
+            if @mode == :thread
+                cpus = ::Libuv.cpu_count || 1
+                cpus.times do
+                    @threads << Libuv::Loop.new
+                end
+            elsif @mode == :no_ipc
+                # TODO:: need to perform process mode as well
+                @threads << @web
             end
 
             @handlers = Set.new
@@ -191,36 +209,44 @@ module SpiderGazelle
             # Create a function for stopping the spider from another thread
             @signal_squash = @web.async @squash
 
-            # Bind the pipe for sending sockets to gazelle
-            begin
-                File.unlink(DELEGATE_PIPE)
-            rescue
-            end
-            @delegator = @web.pipe(true)
-            @delegator.bind(DELEGATE_PIPE) do 
-                @delegator.accept @accept_handler
-            end
-            @delegator.listen(16)
+            # Link up the loops logger
+            logger.progress method(:log)
 
-            # Bind the pipe for communicating with gazelle
-            begin
-                File.unlink(SIGNAL_PIPE)
-            rescue
-            end
-            @signaller = @web.pipe(true)
-            @signaller.bind(SIGNAL_PIPE) do
-                @signaller.accept @accept_gazella
-            end
-            @signaller.listen(16)
-
-
-            # Launch the gazelle here
-            @threads.each do |thread|
-                Thread.new do
-                    gazelle = Gazelle.new(thread, @logger)
-                    gazelle.run
+            if @mode == :no_ipc
+                @gazelle = Gazelle.new(@web, @logger, @mode)
+                @gazelle_count = 1
+                start_bindings
+            else
+                # Bind the pipe for sending sockets to gazelle
+                begin
+                    File.unlink(DELEGATE_PIPE)
+                rescue
                 end
-                @waiting_gazelle += 1
+                @delegator = @web.pipe(true)
+                @delegator.bind(DELEGATE_PIPE) do 
+                    @delegator.accept @accept_handler
+                end
+                @delegator.listen(16)
+
+                # Bind the pipe for communicating with gazelle
+                begin
+                    File.unlink(SIGNAL_PIPE)
+                rescue
+                end
+                @signaller = @web.pipe(true)
+                @signaller.bind(SIGNAL_PIPE) do
+                    @signaller.accept @accept_gazella
+                end
+                @signaller.listen(16)
+
+                # Launch the gazelle here
+                @threads.each do |thread|
+                    Thread.new do
+                        gazelle = Gazelle.new(thread, @logger, @mode)
+                        gazelle.run
+                    end
+                    @waiting_gazelle += 1
+                end
             end
 
             # Signal gazelle death here
@@ -241,29 +267,35 @@ module SpiderGazelle
                     stop(key)
                 end
 
-                # Signal all the gazelle to shutdown
-                promises = []
-                @gazella.each do |gazelle|
-                    promises << gazelle.write(KILL_GAZELLE)
-                end
-
-                # Once the signal has been sent we can stop the spider loop
-                @web.finally(*promises).finally do
-                    # TODO:: need a better system for ensuring these are cleaned up
-                    #  Especially when we implement live migrations and process clusters
-                    begin
-                        @delegator.close
-                        File.unlink(DELEGATE_PIPE)
-                    rescue
-                    end
-                    begin
-                        @signaller.close
-                        File.unlink(SIGNAL_PIPE)
-                    rescue
-                    end
-
+                if @mode == :no_ipc
                     @web.stop
                     @status = :dead
+                else
+                    # Signal all the gazelle to shutdown
+                    promises = []
+                    @gazella.each do |gazelle|
+                        promises << gazelle.write(KILL_GAZELLE)
+                    end
+
+                    # Once the signal has been sent we can stop the spider loop
+                    @web.finally(*promises).finally do
+
+                        # TODO:: need a better system for ensuring these are cleaned up
+                        #  Especially when we implement live migrations and process clusters
+                        begin
+                            @delegator.close
+                            File.unlink(DELEGATE_PIPE)
+                        rescue
+                        end
+                        begin
+                            @signaller.close
+                            File.unlink(SIGNAL_PIPE)
+                        rescue
+                        end
+
+                        @web.stop
+                        @status = :dead
+                    end
                 end
             end
         end
@@ -282,16 +314,20 @@ module SpiderGazelle
 
             @gazelle_count += 1
             if @waiting_gazelle == @gazelle_count
-                @status = :running
-
-                # Start any bindings that are already present
-                @bindings.each_key do |key|
-                    start(key)
-                end
-
-                # Inform any listeners that we have completed loading
-                @gazelles_loaded.resolve(@gazelle_count)
+                start_bindings
             end
+        end
+
+        def start_bindings
+            @status = :running
+
+            # Start any bindings that are already present
+            @bindings.each_key do |key|
+                start(key)
+            end
+
+            # Inform any listeners that we have completed loading
+            @gazelles_loaded.resolve(@gazelle_count)
         end
 
         # A new gazelle loop is ready to accept sockets
@@ -312,6 +348,16 @@ module SpiderGazelle
                     squash
                 end
             end
+        end
+
+        def log(*args)
+            msg = ''
+            if args[0].respond_to? :backtrace
+                msg << "unhandled exception: #{args[0]}\n #{args[0].backtrace}"
+            else
+                msg << "unhandled exception: #{args}"
+            end
+            @logger.error msg
         end
     end
 end

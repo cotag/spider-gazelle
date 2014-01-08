@@ -38,6 +38,10 @@ parser = OptionParser.new do |opts|
     opts.on "-l", "--logfile FILE", "Location of the servers log file (default: logs/server.log)" do |arg|
         options[:rackup] = arg
     end
+
+    opts.on "-m", "--mode MODE", "Either thread, process or no_ipc (default: thread)" do |arg|
+        ENV['SG_MODE'] = arg
+    end
 end
 
 parser.banner = "sg <options> <rackup file>"
@@ -57,6 +61,8 @@ unless File.exists?(options[:rackup])
 end
 
 ENV['RACK_ENV'] = options[:environment].to_s
+# Force process mode on Windows (pipes + sockets not working at the moment)
+ENV['SG_MODE'] = 'no_ipc' if ::FFI::Platform.windows?
 
 ::Libuv::Loop.default.run do |logger|
     logger.progress do |level, errorid, error|
@@ -76,6 +82,7 @@ ENV['RACK_ENV'] = options[:environment].to_s
             puts "#{e.message}\n#{e.backtrace.join("\n") unless e.backtrace.nil?}\n"
         }).finally do
             # This will execute if the TCP binding is lost
+            p 'server failed to load - shutting down'
             server.shutdown
         end
 
