@@ -352,8 +352,9 @@ module SpiderGazelle
 
         def log(*args)
             msg = ''
-            if args[0].respond_to? :backtrace
-                msg << "unhandled exception: #{args[0]}\n #{args[0].backtrace}"
+            if args[-1].respond_to? :backtrace
+                err = args[-1]
+                msg << "unhandled exception: #{args[0..-2]}\n#{err.message}\n#{err.backtrace.join("\n")}"
             else
                 msg << "unhandled exception: #{args}"
             end
