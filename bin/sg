@@ -82,7 +82,6 @@ ENV['SG_MODE'] = 'no_ipc' if ::FFI::Platform.windows?
             puts "#{e.message}\n#{e.backtrace.join("\n") unless e.backtrace.nil?}\n"
         }).finally do
             # This will execute if the TCP binding is lost
-            p 'server failed to load - shutting down'
             server.shutdown
         end
 
