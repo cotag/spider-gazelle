@@ -9,7 +9,7 @@ module SpiderGazelle
         REQUEST_METHOD = 'REQUEST_METHOD'.freeze    # GET, POST, etc
 
 
-        attr_reader :parser_cache, :connections
+        attr_reader :parser_cache, :connections, :logger
 
 
         def set_instance_type(inst)
@@ -18,11 +18,12 @@ module SpiderGazelle
         
 
 
-        def initialize(loop)
+        def initialize(loop, logger)
             @gazelle = loop
             @connections = Set.new      # Set of active connections on this thread
             @parser_cache = []      	# Stale parser objects cached for reuse
 
+            @logger = logger
             @app_cache = {}
             @connection_queue = ::Libuv::Q::ResolvedPromise.new(@gazelle, true)
 
@@ -38,7 +39,9 @@ module SpiderGazelle
             @gazelle.run do |logger|
                 logger.progress do |level, errorid, error|
                     begin
-                        p "Log called: #{level}: #{errorid}\n#{error.message}\n#{error.backtrace.join("\n")}\n"
+                        msg = "Gazelle log: #{level}: #{errorid}\n#{error.message}\n#{error.backtrace.join("\n") if error.backtrace}\n"
+                        @logger.error msg
+                        puts msg
                     rescue Exception
                         p 'error in gazelle logger'
                     end

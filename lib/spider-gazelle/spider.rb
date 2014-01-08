@@ -1,6 +1,8 @@
 require 'set'
 require 'thread'
+require 'logger'
 require 'singleton'
+require 'fileutils'
 
 
 module SpiderGazelle
@@ -16,7 +18,7 @@ module SpiderGazelle
         MODES = [:thread, :process]    # TODO:: implement process
 
 
-        attr_reader :state, :mode, :threads
+        attr_reader :state, :mode, :threads, :logger
 
 
         def initialize
@@ -28,6 +30,14 @@ module SpiderGazelle
             }
             @delegate = method(:delegate)
             @squash = method(:squash)
+
+
+            log_path = ENV['SG_LOG'] || File.expand_path('../../../logs/server.log', __FILE__)
+            dirname = File.dirname(log_path)
+            unless File.directory?(dirname)
+                FileUtils.mkdir_p(dirname)
+            end
+            @logger = ::Logger.new(log_path.to_s, 10, 4194304)
 
             # Keep track of the loading process
             @waiting_gazelle = 0
@@ -207,7 +217,7 @@ module SpiderGazelle
             # Launch the gazelle here
             @threads.each do |thread|
                 Thread.new do
-                    gazelle = Gazelle.new(thread)
+                    gazelle = Gazelle.new(thread, @logger)
                     gazelle.run
                 end
                 @waiting_gazelle += 1

@@ -75,7 +75,7 @@ module SpiderGazelle
         def finished_parsing
             if !@state.keep_alive?
                 @parsing.keep_alive = false
-                @socket.stop_read   # we don't want to do any more work then we need to
+                @socket.stop_read   # we don't want to do any more work than we need to
             end
             @parsing.upgrade = @state.upgrade?
             @pending.push @parsing
@@ -113,10 +113,15 @@ module SpiderGazelle
 
         # Called when an error occurs at any point while responding
         def send_error(reason)
-            puts "send error: #{reason.message}\n#{reason.backtrace.join("\n")}\n"
-            # TODO:: log error reason
             # Close the socket as this is fatal (file read error, gazelle error etc)
             @socket.close
+
+            # Log the error in a worker thread
+            @loop.work do
+                msg = "connection error: #{reason.message}\n#{reason.backtrace.join("\n") if reason.backtrace}\n"
+                puts msg
+                @gazelle.logger.error msg
+            end
         end
 
         # We use promise chaining to move the requests forward

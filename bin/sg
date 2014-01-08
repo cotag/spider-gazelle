@@ -34,6 +34,10 @@ parser = OptionParser.new do |opts|
     opts.on "-r", "--rackup FILE", "Load Rack config from this file (default: config.ru)" do |arg|
         options[:rackup] = arg
     end
+
+    opts.on "-l", "--logfile FILE", "Location of the servers log file (default: logs/server.log)" do |arg|
+        options[:rackup] = arg
+    end
 end
 
 parser.banner = "sg <options> <rackup file>"
@@ -52,7 +56,7 @@ unless File.exists?(options[:rackup])
     abort "No rackup found at #{options[:rackup]}"
 end
 
-ENV['RACK_ENV'] = options[:environment].to_s if options[:environment]
+ENV['RACK_ENV'] = options[:environment].to_s
 
 ::Libuv::Loop.default.run do |logger|
     logger.progress do |level, errorid, error|
@@ -69,7 +73,7 @@ ENV['RACK_ENV'] = options[:environment].to_s if options[:environment]
     server.loaded.then do
         puts "* Loading: #{options[:rackup]}"
         server.load(options[:rackup], options).catch(proc {|e|
-            puts "#{e.message}\n#{e.backtrace.join("\n")}\n"
+            puts "#{e.message}\n#{e.backtrace.join("\n") unless e.backtrace.nil?}\n"
         }).finally do
             # This will execute if the TCP binding is lost
             server.shutdown
