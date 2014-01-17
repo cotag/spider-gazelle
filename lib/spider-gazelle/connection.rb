@@ -226,7 +226,12 @@ module SpiderGazelle
         def write_response(status, headers, body)
             headers[CONNECTION] = CLOSE if @request.keep_alive == false
 
-            if headers[CONTENT_LENGTH]
+            if status == 304
+                # TODO:: should this need its own use case?
+                headers[CONTENT_LENGTH] = '0'
+                write_headers(status, headers)
+                @socket.shutdown if @request.keep_alive == false
+            elsif headers[CONTENT_LENGTH]
                 headers[CONTENT_LENGTH] = headers[CONTENT_LENGTH].to_s
                 write_headers(status, headers)
 
