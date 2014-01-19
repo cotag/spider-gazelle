@@ -360,6 +360,7 @@ module SpiderGazelle
                 msg << "unhandled exception: #{args}"
             end
             @logger.error msg
+            ::Libuv::Q.reject(@web, msg)
         end
     end
 end
