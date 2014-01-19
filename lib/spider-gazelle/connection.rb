@@ -5,6 +5,8 @@ module SpiderGazelle
     class Connection
         Hijack = Struct.new(:socket, :env)
 
+        REQUEST_METHOD = 'REQUEST_METHOD'.freeze # NOTE:: duplicate in gazelle.rb
+        HEAD = 'HEAD'.freeze
 
         RACK = 'rack'.freeze            # used for filtering headers
         CLOSE = 'close'.freeze
@@ -15,6 +17,10 @@ module SpiderGazelle
         COLON_SPACE = ': '.freeze
         EOF = "0\r\n\r\n".freeze
         CRLF = "\r\n".freeze
+        ZERO = '0'.freeze
+
+        HTTP_STATUS_CODES = ::Rack::Utils::HTTP_STATUS_CODES
+        HTTP_STATUS_DEFAULT = proc { 'CUSTOM' }
 
         HTTP_11_400 = "HTTP/1.1 400 Bad Request\r\n\r\n".freeze
 
@@ -187,6 +193,7 @@ module SpiderGazelle
                     @deferred_responses = nil if @deferred_responses
 
                     status, headers, body = result
+                    send_body = @request.env[REQUEST_METHOD] != HEAD
 
                     # If a file, stream the body in a non-blocking fashion
                     if body.respond_to? :to_path
@@ -201,19 +208,38 @@ module SpiderGazelle
 
                         write_headers(status, headers)
 
-                        file = @loop.file(body.to_path, File::RDONLY)
-                        file.progress do    # File is open and available for reading
-                            file.send_file(@socket, type).finally do
-                                file.close
-                                if @request.keep_alive == false
-                                    @socket.shutdown
+                        if send_body
+                            file = @loop.file(body.to_path, File::RDONLY)
+                            file.progress do    # File is open and available for reading
+                                file.send_file(@socket, type).finally do
+                                    file.close
+                                    if @request.keep_alive == false
+                                        @socket.shutdown
+                                    end
                                 end
                             end
+                            return file
+                        end
+                    else
+                        # Optimize the response
+                        begin
+                            body_size = body.size
+                            if body_size < 2
+                                if body_size == 1
+                                    headers[CONTENT_LENGTH] = body[0].bytesize
+                                else
+                                    headers[CONTENT_LENGTH] = ZERO
+                                end
+                            end
+                        rescue # just in case
                         end
 
-                        return file
-                    else
-                        write_response(status, headers, body)
+                        if send_body
+                            write_response(status, headers, body)
+                        else
+                            write_headers(status, headers)
+                            @socket.shutdown if @request.keep_alive == false
+                        end
                     end
                 end
             end
@@ -226,12 +252,7 @@ module SpiderGazelle
         def write_response(status, headers, body)
             headers[CONNECTION] = CLOSE if @request.keep_alive == false
 
-            if status == 304
-                # TODO:: should this need its own use case?
-                headers[CONTENT_LENGTH] = '0'
-                write_headers(status, headers)
-                @socket.shutdown if @request.keep_alive == false
-            elsif headers[CONTENT_LENGTH]
+            if headers[CONTENT_LENGTH]
                 headers[CONTENT_LENGTH] = headers[CONTENT_LENGTH].to_s
                 write_headers(status, headers)
 
@@ -261,7 +282,7 @@ module SpiderGazelle
         end
 
         def write_headers(status, headers)
-            header = "HTTP/1.1 #{status}\r\n"
+            header = "HTTP/1.1 #{status} #{fetch_code(status)}\r\n"
             headers.each do |key, value|
                 next if key.start_with? RACK
 
@@ -277,6 +298,10 @@ module SpiderGazelle
         def write_chunk(part)
             chunk = part.bytesize.to_s(16) << CRLF << part << CRLF
             @socket.write chunk
+        end
+
+        def fetch_code(status)
+            HTTP_STATUS_CODES.fetch(status, &HTTP_STATUS_DEFAULT)
         end
 
 
