@@ -14,11 +14,13 @@ module SpiderGazelle
         @loaded = ThreadSafe::Cache.new
 
         # Load an app and assign it an ID
-        def self.load(rackup)
-            id = @loaded[rackup.to_sym]
+        def self.load(app, options={})
+            is_rack_app = !app.is_a?(String)
+            app_key = is_rack_app ? app.class.name.to_sym : app.to_sym
+            id = @loaded[app_key]
 
             if id.nil?
-                app, options = ::Rack::Builder.parse_file rackup
+                app, options = ::Rack::Builder.parse_file(app) unless is_rack_app
 
                 count = 0
                 @mutex.synchronize {
@@ -26,7 +28,7 @@ module SpiderGazelle
                 }
                 id = Radix.convert(count, B10, B65).to_sym
                 @apps[id] = app
-                @loaded[rackup.to_sym] = id
+                @loaded[app_key] = id
             end
 
             id
