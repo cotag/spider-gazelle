@@ -87,6 +87,8 @@ module SpiderGazelle
             @env.delete(HTTP_CONNECTION)
 
             @env[REQUEST_URI] = @url.freeze
+            # For Rack::Lint on 1.9, ensure that the encoding is always for spec
+            @body.force_encoding('ASCII-8BIT') if @body.respond_to?(:force_encoding)
             @env[RACK_INPUT] = StringIO.new(@body)
 
             # Break the request into its components
