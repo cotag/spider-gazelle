@@ -5,8 +5,8 @@ require 'set'
 module SpiderGazelle
     class Binding
         DEFAULT_OPTIONS = {
-            :host => '0.0.0.0',
-            :port => 3000,
+            :Host => '0.0.0.0',
+            :Port => 3000,
             :tls => false,
             :optimize_for_latency => true,
             :backlog => 1024
@@ -21,7 +21,7 @@ module SpiderGazelle
             @options = DEFAULT_OPTIONS.merge(options)
             @loop = loop
             @delegate = delegate
-            @port = @options[:port]
+            @port = @options[:Port]
             @tls = @options[:tls]
             @optimize = @options[:optimize_for_latency]
 
@@ -34,7 +34,7 @@ module SpiderGazelle
         def bind
             # Bind the socket
             @tcp = @loop.tcp
-            @tcp.bind(@options[:host], @port, @new_connection)
+            @tcp.bind(@options[:Host], @port, @new_connection)
             @tcp.listen(@options[:backlog])
 
             # Delegate errors
