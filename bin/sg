@@ -64,29 +64,6 @@ ENV['RACK_ENV'] = options[:environment].to_s
 # Force process mode on Windows (pipes + sockets not working at the moment)
 ENV['SG_MODE'] = 'no_ipc' if ::FFI::Platform.windows?
 
-::Libuv::Loop.default.run do |logger|
-    logger.progress do |level, errorid, error|
-        begin
-            puts "Log called: #{level}: #{errorid}\n#{error.message}\n#{error.backtrace.join("\n")}\n"
-        rescue Exception
-            p 'error in gazelle logger'
-        end
-    end
-
-    puts "Look out! Here comes Spider-Gazelle #{::SpiderGazelle::VERSION}!"
-    puts "* Environment: #{ENV['RACK_ENV']} on #{RUBY_ENGINE || 'ruby'} #{RUBY_VERSION}"
-    server = ::SpiderGazelle::Spider.instance
-    server.loaded.then do
-        puts "* Loading: #{options[:rackup]}"
-        server.load(options[:rackup], options).catch(proc {|e|
-            puts "#{e.message}\n#{e.backtrace.join("\n") unless e.backtrace.nil?}\n"
-        }).finally do
-            # This will execute if the TCP binding is lost
-            server.shutdown
-        end
-
-        puts "* Listening on tcp://#{options[:host]}:#{options[:port]}"
-    end
-end
+::SpiderGazelle::Spider.run options[:rackup], options
 
 puts "\nSpider-Gazelle leaps through the veldt"

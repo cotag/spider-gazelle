@@ -17,6 +17,11 @@ module SpiderGazelle
         STATES = [:reanimating, :running, :squashing, :dead]
         MODES = [:thread, :process, :no_ipc]    # TODO:: implement clustering using processes
 
+        DEFAULT_OPTIONS = {
+            :Host => '0.0.0.0',
+            :Port => 8080,
+            :Verbose => false
+        }
 
         attr_reader :state, :mode, :threads, :logger
 
@@ -62,6 +67,42 @@ module SpiderGazelle
                 # Don't block on this thread if default reactor not running
                 Thread.new do
                     @web.run &method(:reanimate)
+                end
+            end
+        end
+
+        def run(&block)
+            @web.run &block
+        end
+
+        def self.run(app, options = {})
+            options = DEFAULT_OPTIONS.merge(options)
+
+            instance.run do |logger|
+                logger.progress do |level, errorid, error|
+                    begin
+                        puts "Log called: #{level}: #{errorid}\n#{error.message}\n#{error.backtrace.join("\n")}\n"
+                    rescue Exception
+                        p 'error in gazelle logger'
+                    end
+                end
+
+                puts "Look out! Here comes Spider-Gazelle #{::SpiderGazelle::VERSION}!"
+                puts "* Environment: #{ENV['RACK_ENV']} on #{RUBY_ENGINE || 'ruby'} #{RUBY_VERSION}"
+                server = ::SpiderGazelle::Spider.instance
+                server.loaded.then do
+                    puts "* Loading: #{app}"
+
+                    # yield server if block_given?
+
+                    server.load(app, options).catch(proc {|e|
+                        puts "#{e.message}\n#{e.backtrace.join("\n") unless e.backtrace.nil?}\n"
+                    }).finally do
+                        # This will execute if the TCP binding is lost
+                        server.shutdown
+                    end
+
+                    puts "* Listening on tcp://#{options[:Host]}:#{options[:Port]}"
                 end
             end
         end
