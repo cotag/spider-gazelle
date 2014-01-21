@@ -1,5 +1,5 @@
 require 'thread'
-require 'radix'
+require 'radix/base'
 
 
 module SpiderGazelle
