@@ -1,10 +1,11 @@
 require 'websocket/driver'
+require 'forwardable'
 
 
 module SpiderGazelle
     # TODO:: make a promise that resolves when closed
     class Websocket < ::Libuv::Q::DeferredPromise
-        attr_reader :env, :url, :driver, :socket
+        attr_reader :env, :url, :loop
 
 
         def initialize(tcp, env)
@@ -29,10 +30,15 @@ module SpiderGazelle
             @driver.on(:error, &method(:on_error))
         end
 
-        def start
-            @driver.start
-        end
 
+        extend Forwardable
+        def_delegators :@driver, :start, :ping, :protocol, :ready_state, :set_header, :state, :close
+        def_delegators :@socket, :write
+
+
+        # Write some text to the websocket connection
+        # 
+        # @param string [String] a string of data to be sent to the far end
         def text(string)
             data = string.to_s
             @loop.schedule do
@@ -40,6 +46,9 @@ module SpiderGazelle
             end
         end
 
+        # Write some binary data to the websocket connection
+        # 
+        # @param array [Array] an array of bytes to be sent to the far end
         def binary(array)
             data = array.to_a
             @loop.schedule do
@@ -47,13 +56,20 @@ module SpiderGazelle
             end
         end
 
+        # Used to define a callback when data is received from the client
+        # 
+        # @param callback [Proc] the callback to be called when data is received
         def progress(callback = nil, &blk)
             @progress = callback || blk
         end
 
-
-        def write(data)
-            @socket.write(data)
+        # Used to define a callback when the websocket connection is established
+        # Data sent before this callback is buffered.
+        # 
+        # @param callback [Proc] the callback to be triggered on establishment
+        def on_open(callback = nil, &blk)
+            callback ||= blk
+            @driver.on(:open, &callback)
         end
 
 
