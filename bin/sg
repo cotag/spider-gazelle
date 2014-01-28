@@ -6,25 +6,24 @@ require 'optparse'
 
 
 options = {
-    host: "0.0.0.0",
-    port: 3000,
-    tls: false,
+    Host: "0.0.0.0",
+    Port: 3000,
     environment: ENV['RACK_ENV'] || 'development',
     rackup: "#{Dir.pwd}/config.ru",
-    quiet: false
+    Verbose: false
 }
 
 parser = OptionParser.new do |opts|
     opts.on "-p", "--port PORT", Integer, "Define what port TCP port to bind to (default: 3000)" do |arg|
-        options[:port] = arg
+        options[:Port] = arg
     end
 
     opts.on "-a", "--address HOST", "bind to HOST address (default: 0.0.0.0)" do |arg|
-        options[:host] = arg
+        options[:Host] = arg
     end
 
-    opts.on "-q", "--quiet", "quiet down the output" do
-        options[:quiet] = true
+    opts.on "-v", "--verbose", "loud output" do
+        options[:Verbose] = true
     end
 
     opts.on "-e", "--environment ENVIRONMENT", "The environment to run the Rack app on (default: development)" do |arg|
@@ -36,7 +35,7 @@ parser = OptionParser.new do |opts|
     end
 
     opts.on "-l", "--logfile FILE", "Location of the servers log file (default: logs/server.log)" do |arg|
-        options[:rackup] = arg
+        ENV['SG_LOG'] = arg
     end
 
     opts.on "-m", "--mode MODE", "Either thread, process or no_ipc (default: thread)" do |arg|
@@ -60,7 +59,6 @@ unless File.exists?(options[:rackup])
     abort "No rackup found at #{options[:rackup]}"
 end
 
-ENV['RACK_ENV'] = options[:environment].to_s
 # Force process mode on Windows (pipes + sockets not working at the moment)
 ENV['SG_MODE'] = 'no_ipc' if ::FFI::Platform.windows?
 

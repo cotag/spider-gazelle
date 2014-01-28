@@ -4,13 +4,6 @@ require 'set'
 
 module SpiderGazelle
     class Binding
-        DEFAULT_OPTIONS = {
-            :Host => '0.0.0.0',
-            :Port => 3000,
-            :tls => false,
-            :optimize_for_latency => true,
-            :backlog => 1024
-        }
 
 
         attr_reader :app_id
@@ -18,7 +11,7 @@ module SpiderGazelle
 
         def initialize(loop, delegate, app_id, options = {})
             @app_id = app_id
-            @options = DEFAULT_OPTIONS.merge(options)
+            @options = options
             @loop = loop
             @delegate = delegate
             @port = @options[:Port]
