@@ -47,7 +47,8 @@ module SpiderGazelle
                         puts "#{e.message}\n#{e.backtrace.join("\n") unless e.backtrace.nil?}\n"
                     }).finally do
                         # This will execute if the TCP binding is lost
-                        server.shutdown
+                        # Terminating the application
+                        Process.kill 'INT', 0
                     end
 
                     puts "* Listening on tcp://#{options[:Host]}:#{options[:Port]}"
