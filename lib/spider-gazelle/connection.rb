@@ -197,8 +197,6 @@ module SpiderGazelle
 
                     # If a file, stream the body in a non-blocking fashion
                     if body.respond_to? :to_path
-                        headers[CONNECTION] = CLOSE if @request.keep_alive == false
-
                         if headers[CONTENT_LENGTH]
                             type = :raw
                         else
@@ -250,8 +248,6 @@ module SpiderGazelle
         end
 
         def write_response(status, headers, body)
-            headers[CONNECTION] = CLOSE if @request.keep_alive == false
-
             if headers[CONTENT_LENGTH]
                 headers[CONTENT_LENGTH] = headers[CONTENT_LENGTH].to_s
                 write_headers(status, headers)
@@ -282,6 +278,8 @@ module SpiderGazelle
         end
 
         def write_headers(status, headers)
+            headers[CONNECTION] = CLOSE if @request.keep_alive == false
+
             header = "HTTP/1.1 #{status} #{fetch_code(status)}\r\n"
             headers.each do |key, value|
                 next if key.start_with? RACK
