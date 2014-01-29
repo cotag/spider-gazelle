@@ -14,9 +14,9 @@ module SpiderGazelle
             @options = options
             @loop = loop
             @delegate = delegate
-            @port = @options[:Port]
-            @tls = @options[:tls]
-            @optimize = @options[:optimize_for_latency]
+            @tls = @options[:tls] || false
+            @port = @options[:Port] || (@tls ? 443 : 80)
+            @optimize = @options[:optimize_for_latency] || true
 
             # Connection management functions
             @new_connection = method(:new_connection)
