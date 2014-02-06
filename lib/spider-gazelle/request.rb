@@ -31,10 +31,11 @@ module SpiderGazelle
         
         KEEP_ALIVE = "Keep-Alive".freeze
 
+        CONTENT_LENGTH = 'CONTENT_LENGTH'.freeze
+        CONTENT_TYPE = 'CONTENT_TYPE'.freeze
+        DEFAULT_TYPE = 'text/plain'.freeze
         HTTP_CONTENT_LENGTH = 'HTTP_CONTENT_LENGTH'.freeze
         HTTP_CONTENT_TYPE = 'HTTP_CONTENT_TYPE'.freeze
-        HTTP_AUTHORIZATION = 'AUTHORIZATION'.freeze
-        HTTP_CONNECTION = 'HTTP_CONNECTION'.freeze
 
         SERVER_SOFTWARE   = 'SERVER_SOFTWARE'.freeze
         SERVER   = 'SpiderGazelle'.freeze
@@ -54,7 +55,6 @@ module SpiderGazelle
             'rack.run_once'.freeze => false,            # this isn't CGI so will always be false
 
             'SCRIPT_NAME'.freeze => ENV['SCRIPT_NAME'] || EMPTY,   #  The virtual path of the app base (empty if root)
-            'CONTENT_TYPE'.freeze => 'text/plain',      # works with Rack and Rack::Lint (source puma)
             'SERVER_PROTOCOL'.freeze => HTTP_11,
 
             GATEWAY_INTERFACE => CGI_VER,
@@ -81,12 +81,10 @@ module SpiderGazelle
         end
 
         def execute!
-            @env.delete(HTTP_CONTENT_LENGTH)
-            @env.delete(HTTP_CONTENT_TYPE)
-            @env.delete(HTTP_AUTHORIZATION)
-            @env.delete(HTTP_CONNECTION)
-
+            @env[CONTENT_LENGTH] = @env.delete(HTTP_CONTENT_LENGTH) || @body.length
+            @env[CONTENT_TYPE] = @env.delete(HTTP_CONTENT_TYPE) || DEFAULT_TYPE
             @env[REQUEST_URI] = @url.freeze
+            
             # For Rack::Lint on 1.9, ensure that the encoding is always for spec
             @body.force_encoding('ASCII-8BIT') if @body.respond_to?(:force_encoding)
             @env[RACK_INPUT] = StringIO.new(@body)
