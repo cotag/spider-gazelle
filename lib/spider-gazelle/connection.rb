@@ -17,6 +17,7 @@ module SpiderGazelle
         COLON_SPACE = ': '.freeze
         EOF = "0\r\n\r\n".freeze
         CRLF = "\r\n".freeze
+        NEWLINE = "\n".freeze
         ZERO = '0'.freeze
 
         HTTP_STATUS_CODES = ::Rack::Utils::HTTP_STATUS_CODES
@@ -193,6 +194,7 @@ module SpiderGazelle
                     @deferred_responses = nil if @deferred_responses
 
                     status, headers, body = result
+
                     send_body = @request.env[REQUEST_METHOD] != HEAD
 
                     # If a file, stream the body in a non-blocking fashion
@@ -284,10 +286,12 @@ module SpiderGazelle
             headers.each do |key, value|
                 next if key.start_with? RACK
 
-                header << key
-                header << COLON_SPACE
-                header << value
-                header << CRLF
+                value.split(NEWLINE).each do |unique_value|
+                    header << key
+                    header << COLON_SPACE
+                    header << unique_value
+                    header << CRLF
+                end
             end
             header << CRLF
             @socket.write header
