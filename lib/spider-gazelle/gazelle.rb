@@ -95,7 +95,12 @@ module SpiderGazelle
                 header.gsub!('-', '_')
                 header.prepend(HTTP_META)
                 header.freeze
-                req.env[header] = value
+                if req.env[header]
+                    req.env[header] << ::SpiderGazelle::Connection::NEWLINE
+                    req.env[header] << value
+                else
+                    req.env[header] = value
+                end
             end
         end
 
