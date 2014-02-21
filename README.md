@@ -7,6 +7,8 @@ Spidergazelle, spidergazelle amazingly agile, she leaps through the veldt,
 Spidergazelle, spidergazelle! She don’t care what you think, she says what the hell!
 Look out! Here comes the Spidergazelle!
 
+![logo](https://f.cloud.github.com/assets/376268/2020320/14a9eea0-8831-11e3-968e-8e74d90c3b06.jpg)
+
 
 ## Installation
 
