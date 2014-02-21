@@ -7,6 +7,7 @@ module SpiderGazelle
 
         HTTP_META = 'HTTP_'.freeze
         REQUEST_METHOD = 'REQUEST_METHOD'.freeze    # GET, POST, etc
+        COMMA = ', '.freeze
 
 
         attr_reader :parser_cache, :connections, :logger
@@ -96,7 +97,7 @@ module SpiderGazelle
                 header.prepend(HTTP_META)
                 header.freeze
                 if req.env[header]
-                    req.env[header] << ::SpiderGazelle::Connection::NEWLINE
+                    req.env[header] << COMMA
                     req.env[header] << value
                 else
                     req.env[header] = value
