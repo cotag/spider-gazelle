@@ -1,28 +1,20 @@
+require 'spider-gazelle/const'
 require 'set'
-
 
 module SpiderGazelle
     class Gazelle
-
-
-        HTTP_META = 'HTTP_'.freeze
-        REQUEST_METHOD = 'REQUEST_METHOD'.freeze    # GET, POST, etc
-        COMMA = ', '.freeze
-
+        include Const
 
         attr_reader :parser_cache, :connections, :logger
-
 
         def set_instance_type(inst)
             inst.type = :request
         end
-        
-
 
         def initialize(loop, logger, mode)
             @gazelle = loop
             @connections = Set.new      # Set of active connections on this thread
-            @parser_cache = []      	# Stale parser objects cached for reuse
+            @parser_cache = []          # Stale parser objects cached for reuse
 
             @mode = mode
             @logger = logger
@@ -66,7 +58,6 @@ module SpiderGazelle
                 end
             end
         end
-
 
         # HTTP Parser callbacks:
         def on_message_begin(parser)
@@ -158,9 +149,7 @@ module SpiderGazelle
         end
 
         def process_signal(data, pipe)
-            if data == Spider::KILL_GAZELLE
-                shutdown
-            end
+            shutdown if data == KILL_GAZELLE
         end
 
         def shutdown

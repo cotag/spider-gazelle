@@ -1,10 +1,16 @@
 # -*- encoding: utf-8 -*-
 $:.push File.expand_path("../lib", __FILE__)
-require "spider-gazelle/version"
+
+d = File.read(File.expand_path("../lib/spider-gazelle/const.rb", __FILE__))
+if d =~ /VERSION = "(\d+\.\d+\.\d+)"/
+  version = $1
+else
+  version = "0.0.1"
+end
 
 Gem::Specification.new do |s|
     s.name        = "spider-gazelle"
-    s.version     = SpiderGazelle::VERSION
+    s.version     = version
     s.authors     = ["Stephen von Takach"]
     s.email       = ["steve@cotag.me"]
     s.license     = 'MIT'
@@ -26,7 +32,6 @@ Gem::Specification.new do |s|
 
     s.add_development_dependency 'rspec'    # Testing framework
     s.add_development_dependency 'yard'     # Comment based documentation generation
-    
 
     s.files = Dir["{lib,bin}/**/*"] + %w(Rakefile spider-gazelle.gemspec README.md LICENSE)
     s.test_files = Dir["spec/**/*"]

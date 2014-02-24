@@ -1,40 +1,19 @@
+require 'spider-gazelle/const'
 require 'stringio'
-
 
 module SpiderGazelle
     class Connection
+        include Const
+
         Hijack = Struct.new(:socket, :env)
-
-        REQUEST_METHOD = 'REQUEST_METHOD'.freeze # NOTE:: duplicate in gazelle.rb
-        HEAD = 'HEAD'.freeze
-
-        RACK = 'rack'.freeze            # used for filtering headers
-        CLOSE = 'close'.freeze
-        CONNECTION = 'Connection'.freeze
-        CONTENT_LENGTH = 'Content-Length'.freeze
-        TRANSFER_ENCODING = 'Transfer-Encoding'.freeze
-        CHUNKED = 'chunked'.freeze
-        COLON_SPACE = ': '.freeze
-        EOF = "0\r\n\r\n".freeze
-        CRLF = "\r\n".freeze
-        NEWLINE = "\n".freeze
-        ZERO = '0'.freeze
-
-        HTTP_STATUS_CODES = ::Rack::Utils::HTTP_STATUS_CODES
-        HTTP_STATUS_DEFAULT = proc { 'CUSTOM' }
-
-        HTTP_11_400 = "HTTP/1.1 400 Bad Request\r\n\r\n".freeze
-
 
         def self.on_progress(data, socket); end
         DUMMY_PROGRESS = self.method(:on_progress)
-
 
         # For Gazelle
         attr_reader :state, :parsing
         # For Request
         attr_reader :tls, :port, :loop, :socket, :async_callback
-
 
         def initialize(gazelle, loop, socket, port, state, app, queue)
             # A single parser instance per-connection (supports pipelining)
@@ -54,7 +33,7 @@ module SpiderGazelle
             @write_chunk = method(:write_chunk)
             @current_worker = queue # keep track of work queue head to prevent unintentional GC
             @queue_worker = queue   # start queue with an existing resolved promise (::Libuv::Q::ResolvedPromise.new(@loop, true))
-            
+
             # Socket for writing the response
             @socket = socket
             @app = app
@@ -99,7 +78,7 @@ module SpiderGazelle
             @socket.stop_read
             @queue_worker = @queue_worker.then do
                 # TODO:: send response (400 bad request)
-                @socket.write HTTP_11_400
+                @socket.write ERROR_400_RESPONSE
                 @socket.shutdown
             end
         end
@@ -168,7 +147,7 @@ module SpiderGazelle
 
             if @request.hijacked
                 unlink              # unlink the management of the socket
-                        
+
                 # Pass the hijack response to the captor using the promise
                 # This forwards the socket and environment as well as moving
                 #  continued execution onto the event loop.
@@ -199,7 +178,7 @@ module SpiderGazelle
 
                     # If a file, stream the body in a non-blocking fashion
                     if body.respond_to? :to_path
-                        if headers[CONTENT_LENGTH]
+                        if headers[CONTENT_LENGTH2]
                             type = :raw
                         else
                             type = :http
@@ -226,9 +205,9 @@ module SpiderGazelle
                             body_size = body.size
                             if body_size < 2
                                 if body_size == 1
-                                    headers[CONTENT_LENGTH] = body[0].bytesize
+                                    headers[CONTENT_LENGTH2] = body[0].bytesize
                                 else
-                                    headers[CONTENT_LENGTH] = ZERO
+                                    headers[CONTENT_LENGTH2] = ZERO
                                 end
                             end
                         rescue # just in case
@@ -250,8 +229,8 @@ module SpiderGazelle
         end
 
         def write_response(status, headers, body)
-            if headers[CONTENT_LENGTH]
-                headers[CONTENT_LENGTH] = headers[CONTENT_LENGTH].to_s
+            if headers[CONTENT_LENGTH2]
+                headers[CONTENT_LENGTH2] = headers[CONTENT_LENGTH2].to_s
                 write_headers(status, headers)
 
                 # Stream the response (pass directly into @socket.write)
@@ -271,7 +250,7 @@ module SpiderGazelle
                 body.each &@write_chunk
 
                 if @request.deferred.nil?
-                    @socket.write EOF
+                    @socket.write CLOSE_CHUNKED
                     @socket.shutdown if @request.keep_alive == false
                 else
                     @async_state = :chunked
@@ -288,17 +267,17 @@ module SpiderGazelle
 
                 value.split(NEWLINE).each do |unique_value|
                     header << key
-                    header << COLON_SPACE
+                    header << COLON
                     header << unique_value
-                    header << CRLF
+                    header << LINE_END
                 end
             end
-            header << CRLF
+            header << LINE_END
             @socket.write header
         end
 
         def write_chunk(part)
-            chunk = part.bytesize.to_s(16) << CRLF << part << CRLF
+            chunk = part.bytesize.to_s(16) << LINE_END << part << LINE_END
             @socket.write chunk
         end
 
@@ -348,7 +327,7 @@ module SpiderGazelle
                 # Respond with the headers here
                 write_response(status, headers, body)
             elsif body.empty?
-                @socket.write EOF
+                @socket.write CLOSE_CHUNK
                 @socket.shutdown if @request.keep_alive == false
 
                 # Complete the request here

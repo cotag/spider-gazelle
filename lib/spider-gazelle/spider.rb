@@ -1,3 +1,4 @@
+require 'spider-gazelle/const'
 require 'set'
 require 'thread'
 require 'logger'
@@ -5,22 +6,17 @@ require 'singleton'
 require 'fileutils'   # mkdir_p
 require 'forwardable' # run method
 
-
 module SpiderGazelle
     class Spider
+        include Const
         include Singleton
-
-
-        USE_TLS = 'T'.freeze
-        NO_TLS = 'F'.freeze
-        KILL_GAZELLE = 'k'.freeze
 
         STATES = [:reanimating, :running, :squashing, :dead]
         MODES = [:thread, :process, :no_ipc]    # TODO:: implement clustering using processes
 
         DEFAULT_OPTIONS = {
-            :Host => '0.0.0.0',
-            :Port => 8080,
+            :Host => HOST_0_0_0_0,
+            :Port => PORT_8080,
             :Verbose => false,
             :tls => false,
             :optimize_for_latency => true,
@@ -32,7 +28,7 @@ module SpiderGazelle
 
             ENV['RACK_ENV'] = options[:environment].to_s if options[:environment]
 
-            puts "Look out! Here comes Spider-Gazelle #{::SpiderGazelle::VERSION}!"
+            puts "Look out! Here comes Spider-Gazelle #{SPIDER_GAZELLE_VERSION}!"
             puts "* Environment: #{ENV['RACK_ENV']} on #{RUBY_ENGINE || 'ruby'} #{RUBY_VERSION}"
 
             server = instance
