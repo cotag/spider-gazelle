@@ -28,7 +28,7 @@ module Rack
       def self.valid_options
         { "Host=HOST"       => "Hostname to listen on (default: 0.0.0.0)",
           "Port=PORT"       => "Port to listen on (default: 8080)",
-          "Quiet"           => "Don"t report each request" }
+          "Quiet"           => "Don't report each request" }
       end
     end
 
