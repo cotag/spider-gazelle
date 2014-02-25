@@ -267,7 +267,7 @@ module SpiderGazelle
     end
 
     def write_chunk(part)
-      chunk = part.bytesize.to_s(16) << LINE_END << part << LINE_END
+      chunk = part.bytesize.to_s(HEX_SIZE_CHUNKED_RESPONSE) << LINE_END << part << LINE_END
       @socket.write chunk
     end
 

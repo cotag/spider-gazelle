@@ -15,8 +15,8 @@ module SpiderGazelle
     # TODO:: implement clustering using processes
     MODES = [:thread, :process, :no_ipc]
     DEFAULT_OPTIONS = {
-      Host: HOST_0_0_0_0,
-      Port: PORT_8080,
+      Host: "0.0.0.0",
+      Port: 8080,
       Verbose: false,
       tls: false,
       optimize_for_latency: true,
@@ -29,7 +29,7 @@ module SpiderGazelle
     def_delegators :@web, :run
 
     def self.run(app, options = {})
-      options = DEFAULT_OPTIONS.merge(options)
+      options = DEFAULT_OPTIONS.merge options
 
       ENV['RACK_ENV'] = options[:environment].to_s if options[:environment]
 
@@ -271,8 +271,7 @@ module SpiderGazelle
         end
         @delegator = @web.pipe true
         @delegator.bind(DELEGATE_PIPE) { @delegator.accept @accept_handler }
-        # TODO FIXME. Where does this 16 come from?
-        @delegator.listen 16
+        @delegator.listen INTERNAL_PIPE_BACKLOG
 
         # Bind the pipe for communicating with gazelle
         begin
@@ -281,8 +280,7 @@ module SpiderGazelle
         end
         @signaller = @web.pipe true
         @signaller.bind(SIGNAL_PIPE) { @signaller.accept @accept_gazella }
-        # TODO FIXME. Where does this 16 come from?
-        @signaller.listen 16
+        @signaller.listen INTERNAL_PIPE_BACKLOG
 
         # Launch the gazelle here
         @threads.each do |thread|

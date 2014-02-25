@@ -1,12 +1,12 @@
-require 'rack/handler'
-require 'spider-gazelle'
-
+require "rack/handler"
+require "spider-gazelle"
+require "spider-gazelle/const"
 
 module Rack
   module Handler
     module SpiderGazelle
       DEFAULT_OPTIONS = {
-        :Host => '0.0.0.0',
+        :Host => "0.0.0.0",
         :Port => 8080,
         :Verbose => false
       }
@@ -19,21 +19,19 @@ module Rack
         end
 
         if options[:environment]
-          ENV['RACK_ENV'] = options[:environment].to_s
+          ENV["RACK_ENV"] = options[:environment].to_s
         end
 
         ::SpiderGazelle::Spider.run app, options
       end
 
       def self.valid_options
-        {
-          "Host=HOST"       => "Hostname to listen on (default: 0.0.0.0)",
+        { "Host=HOST"       => "Hostname to listen on (default: 0.0.0.0)",
           "Port=PORT"       => "Port to listen on (default: 8080)",
-          "Quiet"           => "Don't report each request"
-        }
+          "Quiet"           => "Don"t report each request" }
       end
     end
 
-    register :'spider-gazelle', SpiderGazelle
+    register :"spider-gazelle", SpiderGazelle
   end
 end

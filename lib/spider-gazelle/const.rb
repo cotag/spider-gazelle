@@ -74,6 +74,8 @@ module SpiderGazelle
 
     # # The basic max request size we"ll try to read.
     # CHUNK_SIZE = 16 * 1024
+    HEX_SIZE_CHUNKED_RESPONSE = 16
+    INTERNAL_PIPE_BACKLOG = 16
 
     # # This is the maximum header that is allowed before a client is booted.  The parser detects
     # # this, but we"d also like to do this as well.
@@ -113,10 +115,8 @@ module SpiderGazelle
     # Required (set in spider.rb init)
     SERVER_PORT = "SERVER_PORT".freeze
     HTTP_HOST = "HTTP_HOST".freeze
-    HOST_0_0_0_0 = "0.0.0.0".freeze
     PORT_80 = "80".freeze
     PORT_443 = "443".freeze
-    PORT_8080 = "8080".freeze
     LOCALHOST = "localhost".freeze
 
     HTTP_STATUS_DEFAULT = proc { "CUSTOM" }
