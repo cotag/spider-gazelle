@@ -1,5 +1,7 @@
 # spider-gazelle
 
+[<img src="https://codeclimate.com/github/cotag/spider-gazelle.png" />](https://codeclimate.com/github/cotag/spider-gazelle)
+
 
 A fast, parallel and concurrent web server for ruby
 
