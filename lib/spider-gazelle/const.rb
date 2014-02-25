@@ -2,9 +2,7 @@
 require "rack"
 
 module SpiderGazelle
-  # class UnsupportedOption < RuntimeError
-  # end
-
+  # UnsupportedOption = Class.new(RuntimeError)
 
   # Every standard HTTP code mapped to the appropriate message.  These are
   # used so frequently that they are placed directly in SpiderGazelle for easy
@@ -29,7 +27,6 @@ module SpiderGazelle
   # REMOTE_USER, or REMOTE_HOST parameters since those are either a security problem or
   # too taxing on performance.
   module Const
-
     SPIDER_GAZELLE_VERSION = VERSION = "0.1.6".freeze
     # CODE_NAME = "Earl of Sandwich Partition"
     SERVER = "SpiderGazelle".freeze
@@ -77,6 +74,8 @@ module SpiderGazelle
 
     # # The basic max request size we"ll try to read.
     # CHUNK_SIZE = 16 * 1024
+    HEX_SIZE_CHUNKED_RESPONSE = 16
+    INTERNAL_PIPE_BACKLOG = 16
 
     # # This is the maximum header that is allowed before a client is booted.  The parser detects
     # # this, but we"d also like to do this as well.
@@ -116,10 +115,8 @@ module SpiderGazelle
     # Required (set in spider.rb init)
     SERVER_PORT = "SERVER_PORT".freeze
     HTTP_HOST = "HTTP_HOST".freeze
-    HOST_0_0_0_0 = "0.0.0.0".freeze
-    # PORT_80 = "80".freeze
-    # PORT_443 = "443".freeze
-    PORT_8080 = "8080".freeze
+    PORT_80 = "80".freeze
+    PORT_443 = "443".freeze
     LOCALHOST = "localhost".freeze
 
     HTTP_STATUS_DEFAULT = proc { "CUSTOM" }
