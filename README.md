@@ -30,3 +30,8 @@ Look out! Here comes the Spidergazelle!
 
 For other command line options look at [the source](/bin/sg)
 
+
+## Community support
+
+* [GitHub issues](https://github.com/cotag/spider-gazelle/issues).
+* IRC channel `#spider-gazelle` at `irc.freenode.net`.
