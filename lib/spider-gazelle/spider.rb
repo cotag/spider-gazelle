@@ -337,8 +337,6 @@ module SpiderGazelle
 
     # A new gazelle is ready to accept commands
     def accept_gazella(gazelle)
-      #puts "gazelle #{@gazella.size} signal port ready"
-
       # add the signal port to the set
       @gazella.add gazelle
       gazelle.finally do
@@ -364,8 +362,6 @@ module SpiderGazelle
     # A new gazelle loop is ready to accept sockets.
     # We start the server as soon as the first gazelle is ready
     def accept_handler(handler)
-      #puts "gazelle #{@handlers.size} loop running"
-
       # Add the new gazelle to the set
       @handlers.add handler
       # Update the enumerator with the new gazelle

@@ -31,16 +31,14 @@ module SpiderGazelle
       @on_progress = method :on_progress
     end
 
-    # TODO Review.
     def run
       @gazelle.run do |logger|
         logger.progress do |level, errorid, error|
           begin
             msg = "Gazelle log: #{level}: #{errorid}\n#{error.message}\n#{error.backtrace.join("\n") if error.backtrace}\n"
             @logger.error msg
-            puts msg
           rescue Exception
-            p 'error in gazelle logger'
+            puts 'error in gazelle logger'
           end
         end
 

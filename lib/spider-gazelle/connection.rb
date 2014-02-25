@@ -81,7 +81,6 @@ module SpiderGazelle
       # however we will finish processing any valid pipelined requests before shutting down
       @socket.stop_read
       @queue_worker = @queue_worker.then do
-        # TODO:: send response (400 bad request)
         @socket.write ERROR_400_RESPONSE
         @socket.shutdown
       end
@@ -105,8 +104,6 @@ module SpiderGazelle
       # Log the error in a worker thread
       @loop.work do
         msg = "connection error: #{reason.message}\n#{reason.backtrace.join("\n") if reason.backtrace}\n"
-        # TODO FIXME. Why are we outputting it twice?
-        puts msg
         @gazelle.logger.error msg
       end
     end

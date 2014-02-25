@@ -3,21 +3,24 @@ require 'websocket/driver'
 require 'forwardable'
 
 module SpiderGazelle
-  # TODO:: make a promise that resolves when closed
   class Websocket < ::Libuv::Q::DeferredPromise
     include Const
 
     attr_reader :env, :url, :loop
 
+    extend Forwardable
+    def_delegators :@driver, :start, :ping, :protocol, :ready_state, :set_header, :state, :close
+    def_delegators :@socket, :write
+
     def initialize(tcp, env)
       @socket, @env = tcp, env
 
       # Initialise the promise
-      super(@socket.loop, @socket.loop.defer)
+      super @socket.loop, @socket.loop.defer
 
       scheme = env[RACK_URL_SCHEME] == HTTPS ? 'wss://' : 'ws://'
       @url = scheme + env[HTTP_HOST] + env[REQUEST_URI]
-      @driver = ::WebSocket::Driver.rack(self)
+      @driver = ::WebSocket::Driver.rack self
 
       # Pass data from the socket to the driver
       @socket.progress &method(:socket_read)
@@ -26,35 +29,23 @@ module SpiderGazelle
 
       # Driver has indicated that it is closing
       # We'll close the socket after writing any remaining data
-      @driver.on(:close, &method(:on_close))
-      @driver.on(:message, &method(:on_message))
-      @driver.on(:error, &method(:on_error))
+      @driver.on :close, &method(:on_close)
+      @driver.on :message, &method(:on_message)
+      @driver.on :error, &method(:on_error)
     end
-
-
-    extend Forwardable
-    def_delegators :@driver, :start, :ping, :protocol, :ready_state, :set_header, :state, :close
-    def_delegators :@socket, :write
-
 
     # Write some text to the websocket connection
     #
     # @param string [String] a string of data to be sent to the far end
     def text(string)
-      data = string.to_s
-      @loop.schedule do
-        @driver.text(data)
-      end
+      @loop.schedule { @driver.text(string.to_s) }
     end
 
     # Write some binary data to the websocket connection
     #
     # @param array [Array] an array of bytes to be sent to the far end
     def binary(array)
-      data = array.to_a
-      @loop.schedule do
-        @driver.binary(data)
-      end
+      @loop.schedule { @driver.binary(array.to_a) }
     end
 
     # Used to define a callback when data is received from the client
@@ -70,20 +61,18 @@ module SpiderGazelle
     # @param callback [Proc] the callback to be triggered on establishment
     def on_open(callback = nil, &blk)
       callback ||= blk
-      @driver.on(:open, &callback)
+      @driver.on :open, &callback
     end
-
 
     protected
 
-
     def socket_read(data, tcp)
-      @driver.parse(data)
+      @driver.parse data
     end
 
     def socket_close
       if @shutdown_called.nil?
-        @defer.reject(WebSocket::Driver::CloseEvent.new(1006, 'connection was closed unexpectedly'))
+        @defer.reject WebSocket::Driver::CloseEvent.new(1006, 'connection was closed unexpectedly')
       end
     end
 
@@ -93,13 +82,13 @@ module SpiderGazelle
     end
 
     def on_error(event)
-      @defer.reject(event)
+      @defer.reject event
     end
 
     def on_close(event)
       @shutdown_called = true
       @socket.shutdown
-      @defer.resolve(event)
+      @defer.resolve event
     end
-    end
+  end
 end
