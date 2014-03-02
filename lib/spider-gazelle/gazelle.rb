@@ -107,7 +107,9 @@ module SpiderGazelle
 
     def discard(connection)
       @connections.delete(connection)
-      @parser_cache << connection.state
+      state = connection.state
+      state.reset!
+      @parser_cache << state
     end
 
     protected
