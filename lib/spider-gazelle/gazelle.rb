@@ -47,7 +47,7 @@ module SpiderGazelle
           @socket_server = @gazelle.pipe true
           @socket_server.connect(DELEGATE_PIPE) do
             @socket_server.progress &method(:new_connection)
-            @socket_server.start_read2
+            @socket_server.start_read
           end
 
           # A pipe used to signal various control commands (shutdown, etc)
@@ -122,7 +122,10 @@ module SpiderGazelle
       @connection.parsing_error if @parser.parse(@connection.state, data)
     end
 
-    def new_connection(data, socket)
+    def new_connection(data, pipe)
+      socket = @socket_server.check_pending
+      return if socket.nil?
+
       # Data == "TLS_indicator Port APP_ID"
       tls, port, app_id = data.split(' ', 3)
       app = @app_cache[app_id.to_sym] ||= AppStore.get(app_id)
