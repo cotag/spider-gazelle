@@ -122,9 +122,13 @@ module SpiderGazelle
       @connection.parsing_error if @parser.parse(@connection.state, data)
     end
 
-    def new_connection(data, pipe)
-      socket = @socket_server.check_pending
-      return if socket.nil?
+    def new_connection(data, socket)
+      # When in no IPC mode @socket_server is nil and the socket parameter is the socket
+      # If socket server exists then we are expecting sockets over the pipe
+      if @socket_server
+        socket = @socket_server.check_pending
+        return if socket.nil?
+      end
 
       # Data == "TLS_indicator Port APP_ID"
       tls, port, app_id = data.split(' ', 3)
@@ -134,6 +138,7 @@ module SpiderGazelle
       # process any data coming from the socket
       socket.progress @on_progress
       # TODO:: Allow some globals for supplying the certs
+      #  --> We could store these in the AppStore
       socket.start_tls(:server => true) if tls == 'T'
 
       # Keep track of the connection
