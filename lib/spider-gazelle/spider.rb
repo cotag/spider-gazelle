@@ -269,7 +269,7 @@ module SpiderGazelle
           File.unlink DELEGATE_PIPE
         rescue
         end
-        @delegator = @web.pipe true
+        @delegator = @web.pipe :with_socket_support
         @delegator.bind(DELEGATE_PIPE) { @delegator.accept @accept_handler }
         @delegator.listen INTERNAL_PIPE_BACKLOG
 
@@ -278,7 +278,7 @@ module SpiderGazelle
           File.unlink SIGNAL_PIPE
         rescue
         end
-        @signaller = @web.pipe true
+        @signaller = @web.pipe
         @signaller.bind(SIGNAL_PIPE) { @signaller.accept @accept_gazella }
         @signaller.listen INTERNAL_PIPE_BACKLOG
 
