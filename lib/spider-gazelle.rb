@@ -1,6 +1,7 @@
 require "http-parser"   # C based, fast, http parser
 require "libuv"         # Ruby Libuv FFI wrapper
 require "rack"          # Ruby webserver abstraction
+require "rack/lock_patch" # Single threaded in development mode
 
 require "spider-gazelle/request"        # Holds request information and handles request processing
 require "spider-gazelle/connection"     # Holds connection information and handles request pipelining
