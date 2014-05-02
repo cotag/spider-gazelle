@@ -1,12 +1,8 @@
 # -*- encoding: utf-8 -*-
 $:.push File.expand_path("../lib", __FILE__)
 
-d = File.read(File.expand_path("../lib/spider-gazelle/const.rb", __FILE__))
-if d =~ /VERSION = "(\d+\.\d+\.\d+)"/
-  version = $1
-else
-  version = "0.0.1"
-end
+require 'spider-gazelle/const'
+version = SpiderGazelle::Const::VERSION
 
 Gem::Specification.new do |s|
     s.name        = "spider-gazelle"
