@@ -82,18 +82,23 @@ module SpiderGazelle
 
       # Execute the request
       @response = catch :async, &@execute
-      @deferred = @loop.defer if (@response.nil? || @response[0] == -1)
+      if @response.nil? || @response[0] == -1
+        @deferred = @loop.defer
+
+        # close the body for deferred responses
+        unless @response.nil?
+          body = @response[2]
+          body.close if body.respond_to?(:close)
+        end
+      end
       @response
     end
 
     protected
 
-    # Execute the request then close the body
-    # NOTE:: closing the body here might cause issues (see connection.rb)
+    # Execute the request then return the result to the event loop
     def execute(*args)
       result = @app.call @env
-      body = result[2]
-      body.close if body.respond_to?(:close)
       result
     end
 

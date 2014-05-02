@@ -126,7 +126,7 @@ module SpiderGazelle
     # Unlinks the connection from the rack app
     # This occurs when requested and when the socket closes
     def unlink
-      if not @gazelle.nil?
+      if @gazelle
         # Unlink the progress callback (prevent funny business)
         @socket.progress &DUMMY_PROGRESS
         @gazelle.discard self
@@ -149,7 +149,12 @@ module SpiderGazelle
         # Pass the hijack response to the captor using the promise. This forwards the socket and
         # environment as well as moving continued execution onto the event loop.
         @request.hijacked.resolve Hijack.new(@socket, @request.env)
-      elsif !@socket.closed
+      elsif @socket.closed
+        unless result.nil? || @request.deferred
+          body = result[2]
+          body.close if body.respond_to?(:close)
+        end
+      else
         if @request.deferred
           # Wait for the response using this promise
           promise = @request.deferred.promise
@@ -162,7 +167,7 @@ module SpiderGazelle
 
           return promise
           # NOTE:: Somehow getting to here with a nil request... needs investigation
-        elsif not result.nil?
+        elsif result
           # clear any cached responses just in case
           # could be set by error in the rack application
           @deferred_responses = nil if @deferred_responses
@@ -187,6 +192,7 @@ module SpiderGazelle
               file.progress do
                 # File is open and available for reading
                 file.send_file(@socket, type).finally do
+                  body.close if body.respond_to?(:close)
                   file.close
                   @socket.shutdown if @request.keep_alive == false
                 end
@@ -205,6 +211,7 @@ module SpiderGazelle
             if send_body
               write_response status, headers, body
             else
+              body.close if body.respond_to?(:close)
               write_headers status, headers
               @socket.shutdown if @request.keep_alive == false
             end
@@ -229,6 +236,8 @@ module SpiderGazelle
           @request.deferred.resolve true
           # Prevent data being sent after completed
           @request.deferred = nil
+        else
+          body.close if body.respond_to?(:close)
         end
 
         @socket.shutdown if @request.keep_alive == false
@@ -240,6 +249,7 @@ module SpiderGazelle
         body.each &@write_chunk
 
         if @request.deferred.nil?
+          body.close if body.respond_to?(:close)
           @socket.write CLOSE_CHUNKED
           @socket.shutdown if @request.keep_alive == false
         else
@@ -280,9 +290,6 @@ module SpiderGazelle
 
     # Callback from a response that was marked async
     def deferred_callback(data)
-      # We call close here, like on a regular response
-      body = data[2]
-      body.close if body.respond_to?(:close)
       @loop.next_tick { callback(data) }
     end
 
@@ -323,6 +330,8 @@ module SpiderGazelle
         # Send the chunks provided
         body.each &@write_chunk
       end
+
+      body.close if body.respond_to?(:close)
 
       nil
     end
