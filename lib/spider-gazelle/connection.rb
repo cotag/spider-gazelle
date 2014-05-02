@@ -236,8 +236,6 @@ module SpiderGazelle
           @request.deferred.resolve true
           # Prevent data being sent after completed
           @request.deferred = nil
-        else
-          body.close if body.respond_to?(:close)
         end
 
         @socket.shutdown if @request.keep_alive == false
@@ -249,13 +247,14 @@ module SpiderGazelle
         body.each &@write_chunk
 
         if @request.deferred.nil?
-          body.close if body.respond_to?(:close)
           @socket.write CLOSE_CHUNKED
           @socket.shutdown if @request.keep_alive == false
         else
           @async_state = :chunked
         end
       end
+
+      body.close if body.respond_to?(:close)
     end
 
     def write_headers(status, headers)
@@ -317,6 +316,8 @@ module SpiderGazelle
         # Respond with the headers here
         write_response status, headers, body
       elsif body.empty?
+        body.close if body.respond_to?(:close)
+
         @socket.write CLOSE_CHUNK
         @socket.shutdown if @request.keep_alive == false
 
@@ -329,9 +330,8 @@ module SpiderGazelle
       else
         # Send the chunks provided
         body.each &@write_chunk
+        body.close if body.respond_to?(:close)
       end
-
-      body.close if body.respond_to?(:close)
 
       nil
     end
