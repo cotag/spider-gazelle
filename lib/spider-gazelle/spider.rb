@@ -61,8 +61,13 @@ module SpiderGazelle
       #   id => [bind1, bind2]
       # }
 
-      mode = ENV['SG_MODE'] || :thread
-      @mode = mode.to_sym
+      # Single reactor in development
+      if ENV['RACK_ENV'].to_sym == :development
+        @mode = :no_ipc
+      else
+        mode = ENV['SG_MODE'] || :thread
+        @mode = mode.to_sym
+      end
 
       @delegate = method(no_ipc? ? :direct_delegate : :delegate)
       @squash = method(:squash)

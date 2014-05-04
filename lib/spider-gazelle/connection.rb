@@ -187,12 +187,15 @@ module SpiderGazelle
 
             write_headers status, headers
 
+            # Send the body in parallel without blocking the next request in dev
+            # Also if this is a head request we still want the body closed
+            body.close if body.respond_to?(:close)
+
             if send_body
               file = @loop.file body.to_path, File::RDONLY
               file.progress do
                 # File is open and available for reading
                 file.send_file(@socket, type).finally do
-                  body.close if body.respond_to?(:close)
                   file.close
                   @socket.shutdown if @request.keep_alive == false
                 end
