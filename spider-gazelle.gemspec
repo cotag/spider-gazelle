@@ -20,7 +20,7 @@ Gem::Specification.new do |s|
 
     s.add_dependency 'rake'
     s.add_dependency 'http-parser'          # Ruby FFI bindings for https://github.com/joyent/http-parser
-    s.add_dependency 'libuv', '>= 0.12.4'   # Ruby FFI bindings for https://github.com/joyent/libuv
+    s.add_dependency 'libuv', '>= 1.0.0'    # Ruby FFI bindings for https://github.com/joyent/libuv
     s.add_dependency 'rack', '>= 1.0.0'     # Ruby web server interface
     s.add_dependency 'websocket-driver'     # Websocket parser
     s.add_dependency 'thread_safe'          # Thread safe hashes

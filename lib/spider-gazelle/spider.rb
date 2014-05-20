@@ -42,8 +42,6 @@ module SpiderGazelle
         server.loaded.then do
           puts "* Loading: #{app}"
 
-          # yield server if block_given?
-
           caught = proc { |e| puts("#{e.message}\n#{e.backtrace.join("\n")}") unless e.backtrace.nil? }
           server.load(app, options).catch(caught)
             .finally { Process.kill('INT', 0) } # Terminate the application if the TCP binding is lost
@@ -87,13 +85,7 @@ module SpiderGazelle
       @gazelles_loaded = @web.defer
 
       # Start the server
-      if @web.reactor_running?
-        # Call run so we can be notified of errors
-        @web.run &method(:reanimate)
-      else
-        # Don't block on this thread if default reactor not running
-        Thread.new { @web.run(&method(:reanimate)) }
-      end
+      reanimate
     end
 
     # Modes
@@ -238,7 +230,8 @@ module SpiderGazelle
     end
 
     # Triggers the creation of gazelles
-    def reanimate(logger)
+    def reanimate
+
       # Manage the set of Gazelle socket listeners
       @threads = Set.new
 
@@ -260,9 +253,6 @@ module SpiderGazelle
 
       # Create a function for stopping the spider from another thread
       @signal_squash = @web.async @squash
-
-      # Link up the loops logger
-      logger.progress method(:log)
 
       if no_ipc?
         @gazelle = Gazelle.new @web, @logger, @mode
@@ -296,6 +286,8 @@ module SpiderGazelle
 
       # Signal gazelle death here
       @web.signal :INT, @squash
+
+      @wait = @web.async {}
 
       # Update state only once the event loop is ready
       @gazelles_loaded.promise
