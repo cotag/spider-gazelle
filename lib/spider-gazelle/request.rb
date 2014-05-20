@@ -29,7 +29,6 @@ module SpiderGazelle
       @body = ''
       @header = ''
       @url = ''
-      @execute = method :execute
       @env = PROTO_ENV.dup
       @loop = connection.loop
       @env[SERVER_PORT] = connection.port
@@ -81,7 +80,7 @@ module SpiderGazelle
       end
 
       # Execute the request
-      @response = catch :async, &@execute
+      @response = catch(:async) { @app.call @env }
       if @response.nil? || @response[0] == -1
         @deferred = @loop.defer
 
@@ -95,11 +94,6 @@ module SpiderGazelle
     end
 
     protected
-
-    # Execute the request then return the result to the event loop
-    def execute(*args)
-      @app.call @env
-    end
 
     def hijack
       @hijacked = @loop.defer
