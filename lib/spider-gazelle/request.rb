@@ -98,8 +98,7 @@ module SpiderGazelle
 
     # Execute the request then return the result to the event loop
     def execute(*args)
-      result = @app.call @env
-      result
+      @app.call @env
     end
 
     def hijack
