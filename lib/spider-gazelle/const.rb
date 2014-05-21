@@ -147,6 +147,8 @@ module SpiderGazelle
     # SPIDER_GAZELLE_SOCKET = "spider-gazelle.socket".freeze
     # SPIDER_GAZELLE_CONFIG = "spider-gazelle.config".freeze
 
+    ASCII_8BIT = "ASCII-8BIT".freeze
+
     HTTP = "http".freeze
     HTTPS = "https".freeze
 
@@ -176,9 +178,14 @@ module SpiderGazelle
     CLOSE_CHUNKED = "0\r\n\r\n".freeze
 
     COMMA = ", ".freeze
-    COLON = ": ".freeze
+    COLON_SPACE = ": ".freeze
+    COLON = ":".freeze
+    DASH = "-".freeze
+    UNDERSCORE = "_".freeze
+    SPACE = " ".freeze
     NEWLINE = "\n".freeze
     EMPTY = "".freeze
+    QUESTION_MARK = "?".freeze
 
     ZERO = "0".freeze
 

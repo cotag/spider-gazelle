@@ -30,7 +30,6 @@ module SpiderGazelle
 
       # Used to chain promises (ensures requests are processed in order)
       @process_next = method :process_next
-      @write_chunk = method :write_chunk
       # Keep track of work queue head to prevent unintentional GC
       @current_worker = queue
       # Start queue with an existing resolved promise (::Libuv::Q::ResolvedPromise.new(@loop, true))
@@ -166,7 +165,6 @@ module SpiderGazelle
           end
 
           return promise
-          # NOTE:: Somehow getting to here with a nil request... needs investigation
         elsif result
           # clear any cached responses just in case
           # could be set by error in the rack application
@@ -247,6 +245,7 @@ module SpiderGazelle
         write_headers status, headers
 
         # Stream the response
+        @write_chunk ||= method :write_chunk
         body.each &@write_chunk
 
         if @request.deferred.nil?
@@ -269,7 +268,7 @@ module SpiderGazelle
 
         value.split(NEWLINE).each do |unique_value|
           header << key
-          header << COLON
+          header << COLON_SPACE
           header << unique_value
           header << LINE_END
         end
@@ -332,6 +331,7 @@ module SpiderGazelle
         deferred.resolve true
       else
         # Send the chunks provided
+        @write_chunk ||= method :write_chunk
         body.each &@write_chunk
         body.close if body.respond_to?(:close)
       end

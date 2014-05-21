@@ -81,7 +81,7 @@ module SpiderGazelle
       else
         header = req.header
         header.upcase!
-        header.gsub!('-', '_')
+        header.gsub!(DASH, UNDERSCORE)
         header.prepend(HTTP_META)
         header.freeze
         if req.env[header]
@@ -131,7 +131,7 @@ module SpiderGazelle
       end
 
       # Data == "TLS_indicator Port APP_ID"
-      tls, port, app_id = data.split(' ', 3)
+      tls, port, app_id = data.split(SPACE, 3)
       app = @app_cache[app_id.to_sym] ||= AppStore.get(app_id)
       inst = @parser_cache.pop || ::HttpParser::Parser.new_instance(&@set_instance_type)
 
@@ -139,7 +139,7 @@ module SpiderGazelle
       socket.progress @on_progress
       # TODO:: Allow some globals for supplying the certs
       #  --> We could store these in the AppStore
-      socket.start_tls(:server => true) if tls == 'T'
+      socket.start_tls(:server => true) if tls == USE_TLS
 
       # Keep track of the connection
       connection = Connection.new self, @gazelle, socket, port, inst, app, @connection_queue

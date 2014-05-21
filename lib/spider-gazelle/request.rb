@@ -43,11 +43,11 @@ module SpiderGazelle
       @env[REQUEST_URI] = @url.freeze
 
       # For Rack::Lint on 1.9, ensure that the encoding is always for spec
-      @body.force_encoding('ASCII-8BIT') if @body.respond_to?(:force_encoding)
+      @body.force_encoding(ASCII_8BIT) if @body.respond_to?(:force_encoding)
       @env[RACK_INPUT] = StringIO.new @body
 
       # Break the request into its components
-      query_start  = @url.index '?'
+      query_start  = @url.index QUESTION_MARK
       if query_start
         path = @url[0...query_start].freeze
         @env[PATH_INFO] = path
@@ -56,12 +56,12 @@ module SpiderGazelle
       else
         @env[PATH_INFO] = @url
         @env[REQUEST_PATH] = @url
-        @env[QUERY_STRING] = ''
+        @env[QUERY_STRING] = EMPTY
       end
 
       # Grab the host name from the request
       if host = @env[HTTP_HOST]
-        if colon = host.index(':')
+        if colon = host.index(COLON)
           @env[SERVER_NAME] = host[0, colon]
           @env[SERVER_PORT] = host[colon+1, host.bytesize]
         else
