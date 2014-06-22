@@ -221,7 +221,9 @@ module SpiderGazelle
     # Called from the binding for sending to gazelles
     def delegate(client, tls, port, app_id)
       indicator = tls ? USE_TLS : NO_TLS
-      @select_handler.next.write2(client, "#{indicator} #{port} #{app_id}")
+      @select_handler.next.write2(client, "#{indicator} #{port} #{app_id}").finally do
+        client.close
+      end
     end
 
     def direct_delegate(client, tls, port, app_id)
