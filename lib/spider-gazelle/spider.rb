@@ -70,11 +70,17 @@ module SpiderGazelle
       @delegate = method(no_ipc? ? :direct_delegate : :delegate)
       @squash = method(:squash)
 
-      # FIXME The expanded path path seems a bit risky
-      log_path = ENV['SG_LOG'] || File.expand_path('../../../logs/server.log', __FILE__)
+      log_path = ENV['SG_LOG'] || File.expand_path('log/sg.log', Dir.pwd)
       dirname = File.dirname(log_path)
       FileUtils.mkdir_p(dirname) unless File.directory?(dirname)
       @logger = ::Logger.new(log_path.to_s, 10, 4194304)
+
+      # Create the PID file
+      pid_path = ENV['SG_PID'] || File.expand_path('tmp/pids/sg.pid', Dir.pwd)
+      dirname = File.dirname(pid_path)
+      FileUtils.mkdir_p(dirname) unless File.directory?(dirname)
+      @pid = Management::Pid.new(pid_path)
+
 
       # Keep track of the loading process
       @waiting_gazelle = 0

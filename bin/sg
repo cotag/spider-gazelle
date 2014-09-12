@@ -34,8 +34,12 @@ parser = OptionParser.new do |opts|
         options[:rackup] = arg
     end
 
-    opts.on "-l", "--logfile FILE", "Location of the servers log file (default: logs/server.log)" do |arg|
+    opts.on "-l", "--log FILE", "Location of the servers log file (default: logs/server.log)" do |arg|
         ENV['SG_LOG'] = arg
+    end
+
+    opts.on "-P", "--pid FILE", "Location of the servers pid file (default: tmp/pids/sg-PORT.pid)" do |arg|
+        ENV['SG_PID'] = arg
     end
 
     opts.on "-m", "--mode MODE", "Either thread, process or no_ipc (default: thread)" do |arg|
