@@ -258,6 +258,13 @@ module SpiderGazelle
 
       body.close if body.respond_to?(:close)
     end
+    
+    def add_header(header, key, value)
+      header << key
+      header << COLON_SPACE
+      header << value
+      header << LINE_END
+    end
 
     def write_headers(status, headers)
       headers[CONNECTION] = CLOSE if @request.keep_alive == false
@@ -266,11 +273,10 @@ module SpiderGazelle
       headers.each do |key, value|
         next if key.start_with? RACK
 
-        value.split(NEWLINE).each do |unique_value|
-          header << key
-          header << COLON_SPACE
-          header << unique_value
-          header << LINE_END
+        if value.is_a? String
+          value.split(NEWLINE).each {|val| add_header(header, key, val)}
+        else
+          add_header(header, key, value.to_s)
         end
       end
       header << LINE_END
