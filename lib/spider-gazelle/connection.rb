@@ -272,12 +272,7 @@ module SpiderGazelle
       header = "HTTP/1.1 #{status} #{fetch_code(status)}\r\n"
       headers.each do |key, value|
         next if key.start_with? RACK
-
-        if value.is_a? String
-          value.split(NEWLINE).each {|val| add_header(header, key, val)}
-        else
-          add_header(header, key, value.to_s)
-        end
+        value.to_s.split(NEWLINE).each {|val| add_header(header, key, val)}
       end
       header << LINE_END
       @socket.write header
