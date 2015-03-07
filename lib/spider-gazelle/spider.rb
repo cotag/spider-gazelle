@@ -297,8 +297,6 @@ module SpiderGazelle
       # Signal gazelle death here
       @web.signal :INT, @squash
 
-      @wait = @web.async {}
-
       # Update state only once the event loop is ready
       @gazelles_loaded.promise
     end
