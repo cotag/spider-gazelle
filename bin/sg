@@ -38,10 +38,6 @@ parser = OptionParser.new do |opts|
         ENV['SG_LOG'] = arg
     end
 
-    opts.on "-P", "--pid FILE", "Location of the servers pid file (default: tmp/pids/sg-PORT.pid)" do |arg|
-        ENV['SG_PID'] = arg
-    end
-
     opts.on "-m", "--mode MODE", "Either thread, process or no_ipc (default: thread)" do |arg|
         ENV['SG_MODE'] = arg
     end

@@ -75,15 +75,6 @@ module SpiderGazelle
       FileUtils.mkdir_p(dirname) unless File.directory?(dirname)
       @logger = ::Logger.new(log_path.to_s, 10, 4194304)
 
-      unless ::FFI::Platform.windows?
-        # Create the PID file
-        pid_path = ENV['SG_PID'] || File.expand_path('tmp/pids/sg.pid', Dir.pwd)
-        dirname = File.dirname(pid_path)
-        FileUtils.mkdir_p(dirname) unless File.directory?(dirname)
-        @pid = Management::Pid.new(pid_path)
-      end
-
-
       # Keep track of the loading process
       @waiting_gazelle = 0
       @gazelle_count = 0
