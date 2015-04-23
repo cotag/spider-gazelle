@@ -119,7 +119,13 @@ module SpiderGazelle
     # Returns the response as the result of the work
     # We support the unofficial rack async api (multi-call version for chunked responses)
     def work
-      @request.execute!
+      begin
+        @request.execute!
+      rescue => e
+        @gazelle.logger.error "framework error: #{e.message}\n#{e.backtrace.join("\n") if e.backtrace}\n"
+        @request.keep_alive = false
+        [500, {}, EMPTY_RESPONSE]
+      end
     end
 
     # Unlinks the connection from the rack app

@@ -58,7 +58,7 @@ module SpiderGazelle
     # SPIDER_GAZELLE_TMP_BASE = "spider-gazelle".freeze
 
     # # Indicate that we couldn"t parse the request
-    ERROR_400_RESPONSE = "HTTP/1.1 400 Bad Request\r\n\r\n"
+    ERROR_400_RESPONSE = "HTTP/1.1 400 Bad Request\r\n\r\n".freeze
 
     # The standard empty 404 response for bad requests.  Use Error4040Handler for custom stuff.
     ERROR_404_RESPONSE = "HTTP/1.1 404 Not Found\r\nConnection: close\r\nServer: #{SERVER} #{SPIDER_GAZELLE_VERSION}\r\n\r\nNOT FOUND".freeze
@@ -67,7 +67,8 @@ module SpiderGazelle
     ERROR_408_RESPONSE = "HTTP/1.1 408 Request Timeout\r\nConnection: close\r\nServer:  #{SERVER} #{SPIDER_GAZELLE_VERSION}\r\n\r\n".freeze
 
     # Indicate that there was an internal error, obviously.
-    ERROR_500_RESPONSE = "HTTP/1.1 500 Internal Server Error\r\n\r\n"
+    ERROR_500_RESPONSE = "HTTP/1.1 500 Internal Server Error\r\n\r\n".freeze
+    EMPTY_RESPONSE = [''.freeze].freeze
 
     # A common header for indicating the server is too busy.  Not used yet.
     ERROR_503_RESPONSE = "HTTP/1.1 503 Service Unavailable\r\n\r\nBUSY".freeze
