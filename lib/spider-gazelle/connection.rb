@@ -1,4 +1,5 @@
 require 'spider-gazelle/const'
+require 'digest/md5'
 require 'stringio'
 
 module SpiderGazelle
@@ -182,30 +183,50 @@ module SpiderGazelle
 
           # If a file, stream the body in a non-blocking fashion
           if body.respond_to? :to_path
-            if headers[CONTENT_LENGTH2]
-              type = :raw
-            else
-              type = :http
-              headers[TRANSFER_ENCODING] = CHUNKED
-            end
+            file = @loop.file body.to_path, File::RDONLY
+            file.progress do
+              statprom = file.stat
+              statprom.then do |stats|
+                headers[ETAG] = ::Digest::MD5.hexdigest "#{stats[:st_mtim][:tv_sec]}#{body.to_path}"
 
-            write_headers status, headers
+                if headers[CONTENT_LENGTH2]
+                  type = :raw
+                else
+                  type = :http
+                  headers[TRANSFER_ENCODING] = CHUNKED
+                end
 
-            # Send the body in parallel without blocking the next request in dev
-            # Also if this is a head request we still want the body closed
-            body.close if body.respond_to?(:close)
+                write_headers status, headers
 
-            if send_body
-              file = @loop.file body.to_path, File::RDONLY
-              file.progress do
-                # File is open and available for reading
-                file.send_file(@socket, type).finally do
+                # Send the body in parallel without blocking the next request in dev
+                # Also if this is a head request we still want the body closed
+                body.close if body.respond_to?(:close)
+
+                if send_body
+                  # File is open and available for reading
+                  file.send_file(@socket, type).finally do
+                    file.close
+                    @socket.shutdown if @request.keep_alive == false
+                  end
+                else
                   file.close
                   @socket.shutdown if @request.keep_alive == false
                 end
               end
-              return file
+
+              # Ensure the file is closed if there is an error
+              statprom.catch do |reason|
+                file.close
+                @loop.work do
+                  msg = "connection error: #{reason.message}\n#{reason.backtrace.join("\n") if reason.backtrace}\n"
+                  @gazelle.logger.error msg
+                end
+
+                send_response [500, {}, EMPTY_RESPONSE]
+              end
             end
+
+            return file
           else
             # Optimize the response
             begin

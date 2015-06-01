@@ -93,7 +93,7 @@ module SpiderGazelle
     DEFAULT_TYPE = "text/plain".freeze
 
     # LAST_MODIFIED = "Last-Modified".freeze
-    # ETAG = "ETag".freeze
+    ETAG = "ETag".freeze
     # SLASH = "/".freeze
     REQUEST_METHOD = "REQUEST_METHOD".freeze
     # GET = "GET".freeze
