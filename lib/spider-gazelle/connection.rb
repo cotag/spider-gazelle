@@ -184,6 +184,11 @@ module SpiderGazelle
           # If a file, stream the body in a non-blocking fashion
           if body.respond_to? :to_path
             file = @loop.file body.to_path, File::RDONLY
+
+            # Send the body in parallel without blocking the next request in dev
+            # Also if this is a head request we still want the body closed
+            body.close if body.respond_to?(:close)
+
             file.progress do
               statprom = file.stat
               statprom.then do |stats|
@@ -197,10 +202,6 @@ module SpiderGazelle
                 end
 
                 write_headers status, headers
-
-                # Send the body in parallel without blocking the next request in dev
-                # Also if this is a head request we still want the body closed
-                body.close if body.respond_to?(:close)
 
                 if send_body
                   # File is open and available for reading

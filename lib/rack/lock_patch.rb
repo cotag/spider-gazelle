@@ -8,6 +8,7 @@ module Rack
   # will effectively be executed synchronously.
   class Lock
     # FLAG = 'rack.multithread'.freeze # defined in rack/lock
+    RACK_MULTITHREAD ||= FLAG
 
     def initialize(app, mutex = Mutex.new)
       @app, @mutex = app, mutex
@@ -16,20 +17,16 @@ module Rack
     end
 
     def call(env)
-      old, env[FLAG] = env[FLAG], false
       @mutex.lock
       @count += 1
       @sig.wait(@mutex) if @count > 1
-      response = @app.call(env)
-      body = BodyProxy.new(response[2]) {
+      response = @app.call(env.merge(RACK_MULTITHREAD => false))
+      returned = response << BodyProxy.new(response.pop) {
         @mutex.synchronize { unlock }
       }
-      response[2] = body
-      response
     ensure
-      unlock unless body
+      unlock unless returned
       @mutex.unlock
-      env[FLAG] = old
     end
 
     private
