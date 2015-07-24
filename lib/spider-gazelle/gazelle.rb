@@ -1,162 +1,77 @@
-require 'spider-gazelle/const'
-require 'set'
+require "http-parser"     # C based, fast, http parser
+require "rack"            # Ruby webserver abstraction
+
+#require "spider-gazelle/gazelle/request"        # Holds request information and handles request processing
+#require "spider-gazelle/gazelle/connection"     # Holds connection information and handles request pipelining
+
+# Reactor aware websocket implementation
+#require "spider-gazelle/upgrades/websocket"
+
 
 module SpiderGazelle
-  class Gazelle
-    include Const
+    class Gazelle
+        SPACE = ' '.freeze
 
-    attr_reader :parser_cache, :connections, :logger
-
-    def set_instance_type(inst)
-      inst.type = :request
-    end
-
-    def initialize(loop, logger, mode)
-      @gazelle = loop
-      # Set of active connections on this thread
-      @connections = Set.new
-      # Stale parser objects cached for reuse
-      @parser_cache = []
-
-      @mode = mode
-      @logger = logger
-      @app_cache = {}
-      @connection_queue = ::Libuv::Q::ResolvedPromise.new @gazelle, true
-
-      # A single parser instance for processing requests for each gazelle
-      @parser = ::HttpParser::Parser.new self
-      @set_instance_type = method :set_instance_type
-
-      # Single progress callback for each gazelle
-      @on_progress = method :on_progress
-    end
-
-    def run
-      @gazelle.run do |logger|
-        logger.progress do |level, errorid, error|
-          begin
-            msg = "Gazelle log: #{level}: #{errorid}\n#{error.message}\n#{error.backtrace.join("\n") if error.backtrace}\n"
-            @logger.error msg
-          rescue Exception
-            puts 'error in gazelle logger'
-          end
+        def initialize(type)
+            raise ArgumentError, "type must be one of #{MODES}" unless MODES.include?(type)
+            
+            @type = type
+            @logger = Logger.instance
+            @thread = @logger.thread
         end
 
-        unless @mode == :no_ipc
-          # A pipe used to forward connections to different threads
-          @socket_server = @gazelle.pipe true
-          @socket_server.connect(DELEGATE_PIPE) do
-            @socket_server.progress &method(:new_connection)
-            @socket_server.start_read
-          end
+        def run!(options)
+            @options = options
+            @logger.verbose "Gazelle Started!".freeze
 
-          # A pipe used to signal various control commands (shutdown, etc)
-          @signal_server = @gazelle.pipe
-          @signal_server.connect(SIGNAL_PIPE) do
-            @signal_server.progress &method(:process_signal)
-            @signal_server.start_read
-          end
+            connect_to_spider unless @type == :no_ipc
+
+            load_required_applications
         end
-      end
-    end
 
-    # HTTP Parser callbacks:
-    def on_message_begin(parser)
-      @connection.start_parsing
-    end
-
-    def on_url(parser, url)
-      @connection.parsing.url << url
-    end
-
-    def on_header_field(parser, header)
-      req = @connection.parsing
-      req.header.frozen? ? req.header = header : req.header << header
-    end
-
-    def on_header_value(parser, value)
-      req = @connection.parsing
-      if req.header.frozen?
-        req.env[req.header] << value
-      else
-        header = req.header
-        header.upcase!
-        header.gsub!(DASH, UNDERSCORE)
-        header.prepend(HTTP_META)
-        header.freeze
-        if req.env[header]
-          req.env[header] << COMMA
-          req.env[header] << value
-        else
-          req.env[header] = value
+        def new_app(options)
+            # TODO:: load this app into all of the gazelles dynamically
         end
-      end
+
+        def new_connection(data, socket)
+            # If pipe does not exist then we are in no_ipc mode
+            if @pipe
+                socket = @pipe.check_pending
+                return if socket.nil?
+            end
+
+            tls, port, app_id = data.split(SPACE, 3)
+        end
+
+
+        protected
+
+
+        def connect_to_spider
+            @pipe = @thread.pipe :ipc
+            @pipe.connect(SPIDER_SERVER) do |client|
+                client.progress method(:new_connection)
+                client.start_read
+
+                authenticate
+            end
+
+            @pipe.catch do |reason|
+                @logger.print_error(error)
+            end
+
+            @pipe.finally do
+                Reactor.instance.shutdown
+            end
+        end
+
+        def authenticate
+            @pipe.write "#{@options[0][:gazelle]} #{@type}"
+        end
+
+        def load_required_applications
+            # TODO:: Loop through the options and load all the applications
+            # That require gazelles of the same type
+        end
     end
-
-    def on_headers_complete(parser)
-      @connection.parsing.env[REQUEST_METHOD] = @connection.state.http_method.to_s
-    end
-
-    def on_body(parser, data)
-      @connection.parsing.body << data
-    end
-
-    def on_message_complete(parser)
-      @connection.finished_parsing
-    end
-
-    def discard(connection)
-      @connections.delete(connection)
-      state = connection.state
-      state.reset!
-      @parser_cache << state
-    end
-
-    protected
-
-    def on_progress(data, socket)
-      # Keep track of which connection we are processing for the callbacks
-      @connection = socket.storage
-
-      # Check for errors during the parsing of the request
-      @connection.parsing_error if @parser.parse(@connection.state, data)
-    end
-
-    def new_connection(data, socket)
-      # When in no IPC mode @socket_server is nil and the socket parameter is the socket
-      # If socket server exists then we are expecting sockets over the pipe
-      if @socket_server
-        socket = @socket_server.check_pending
-        return if socket.nil?
-      end
-
-      # Data == "TLS_indicator Port APP_ID"
-      tls, port, app_id = data.split(SPACE, 3)
-      app = @app_cache[app_id.to_sym] ||= AppStore.get(app_id)
-      inst = @parser_cache.pop || ::HttpParser::Parser.new_instance(&@set_instance_type)
-
-      # process any data coming from the socket
-      socket.progress @on_progress
-      # TODO:: Allow some globals for supplying the certs
-      #  --> We could store these in the AppStore
-      socket.start_tls(:server => true) if tls == USE_TLS
-
-      # Keep track of the connection
-      connection = Connection.new self, @gazelle, socket, port, inst, app, @connection_queue
-      @connections.add connection
-      # This allows us to re-use the one proc for parsing
-      socket.storage = connection
-
-      socket.start_read
-    end
-
-    def process_signal(data, pipe)
-      shutdown if data == KILL_GAZELLE
-    end
-
-    def shutdown
-      # TODO:: do this nicely. Need to signal the connections to close
-      @gazelle.stop
-    end
-  end
 end

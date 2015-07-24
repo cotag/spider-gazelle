@@ -1,8 +1,8 @@
 # -*- encoding: utf-8 -*-
 $:.push File.expand_path("../lib", __FILE__)
 
-require 'spider-gazelle/const'
-version = SpiderGazelle::Const::VERSION
+require 'spider-gazelle'
+version = SpiderGazelle::VERSION
 
 Gem::Specification.new do |s|
     s.name        = "spider-gazelle"
@@ -34,7 +34,7 @@ Gem::Specification.new do |s|
     s.extra_rdoc_files = ["README.md"]
 
     s.bindir = 'bin'
-    s.executables = ['sg']
+    s.executables = ['sg2']
 
     s.require_paths = ["lib"]
 end

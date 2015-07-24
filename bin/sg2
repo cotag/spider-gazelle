@@ -1,0 +1,33 @@
+#!/usr/bin/env ruby
+
+require 'spider-gazelle'
+SpiderGazelle::LaunchControl.instance.exec(ARGV)
+
+
+# Modes:
+# =====
+# * Spider
+# * Gazelle
+# * Signaller
+
+
+# Spider:
+# ======
+# * Mount application on port (process, thread or no_ipc)
+# ** Process by default
+# ** Thread for jRuby, Rubinius (unix only)
+# ** no_ipc for windows (if Process is undesirable)
+
+# * Reload spider (and applications)
+# ** Spin up a new spider with takeover details
+# ** If password accepted then send sockets with application details to new spider
+# ** Signal existing applications to shutdown once requests complete
+# ** Old gazelles close once requests complete
+
+
+# Gazelle:
+# =======
+# * Load application
+# * Authenticates with Spider
+# * Uses a pipe for server level logging (prevents interleveing)
+# * Accept sockets
