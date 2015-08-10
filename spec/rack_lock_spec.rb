@@ -123,16 +123,4 @@ describe Rack::Lock do
     expect { app.call(env) }.to raise_error(ArgumentError)
     expect(lock.would_block).to eq(false)
   end
-
-  it "set multithread flag to false" do
-    outer = nil
-    app = lock_app(lambda { |env|
-      outer = env
-      expect(env['rack.multithread']).to eq(false)
-      [200, {"Content-Type" => "text/plain"}, %w{ a b c }]
-    })[1]
-    resp = app.call(Rack::MockRequest.env_for("/"))[2]
-    resp.close
-    expect(outer['rack.multithread']).to eq(true)
-  end
 end
