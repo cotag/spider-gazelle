@@ -18,7 +18,6 @@ module SpiderGazelle
       @optimize = @options[:optimize_for_latency] || true
 
       # Connection management functions
-      @new_connection = method :new_connection
       @accept_connection = method :accept_connection
     end
 
@@ -26,7 +25,7 @@ module SpiderGazelle
     def bind
       # Bind the socket
       @tcp = @loop.tcp
-      @tcp.bind @options[:Host], @port, @new_connection
+      @tcp.bind @options[:Host], @port, @accept_connection
       @tcp.listen @options[:backlog]
 
       # Delegate errors
@@ -42,11 +41,6 @@ module SpiderGazelle
     end
 
     protected
-
-    # There is a new connection pending. We accept it
-    def new_connection(server)
-      server.accept @accept_connection
-    end
 
     # Once the connection is accepted we disable Nagles Algorithm
     # This improves performance as we are using vectored or scatter/gather IO
