@@ -266,7 +266,7 @@ module SpiderGazelle
         rescue
         end
         @delegator = @web.pipe :with_socket_support
-        @delegator.bind(DELEGATE_PIPE) { @delegator.accept @accept_handler }
+        @delegator.bind(DELEGATE_PIPE, @accept_handler)
         @delegator.listen INTERNAL_PIPE_BACKLOG
 
         # Bind the pipe for communicating with gazelle
@@ -275,7 +275,7 @@ module SpiderGazelle
         rescue
         end
         @signaller = @web.pipe
-        @signaller.bind(SIGNAL_PIPE) { @signaller.accept @accept_gazella }
+        @signaller.bind(SIGNAL_PIPE, @accept_gazella)
         @signaller.listen INTERNAL_PIPE_BACKLOG
 
         # Launch the gazelle here

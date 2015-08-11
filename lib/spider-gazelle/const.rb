@@ -27,7 +27,7 @@ module SpiderGazelle
   # REMOTE_USER, or REMOTE_HOST parameters since those are either a security problem or
   # too taxing on performance.
   module Const
-    SPIDER_GAZELLE_VERSION = VERSION = "1.1.0".freeze
+    SPIDER_GAZELLE_VERSION = VERSION = "1.1.1".freeze
     # CODE_NAME = "Earl of Sandwich Partition"
     SERVER = "SpiderGazelle".freeze
 
