@@ -1,10 +1,7 @@
 require 'spider-gazelle/gazelle/app_store'
-require 'spider-gazelle/gazelle/parser'
+require 'spider-gazelle/gazelle/http1'
 require 'http-parser'     # C based, fast, http parser
 require 'rack'            # Ruby webserver abstraction
-
-#require "spider-gazelle/gazelle/request"        # Holds request information and handles request processing
-#require "spider-gazelle/gazelle/connection"     # Holds connection information and handles request pipelining
 
 # Reactor aware websocket implementation
 #require "spider-gazelle/upgrades/websocket"
@@ -20,14 +17,17 @@ module SpiderGazelle
             @type = type
             @logger = Logger.instance
             @thread = thread
-            @parser_cache = []
+
+            @http1_cache = []
+            @http2_cache = []
+            @return_http1 = method(:return_http1)
+            @return_http2 = method(:return_http2)
             @parser_count = 0
 
-            @return_method = method(:connection_closed)
             @on_progress   = method(:on_progress)
             @set_protocol  = method(:set_protocol)
 
-            # Register the gazelle with the signaller so we can shutdown
+            # Register the gazelle with the signaller so we can shutdown elegantly
             if @type == :process
                 Signaller.instance.gazelle = self
             end
@@ -116,23 +116,20 @@ module SpiderGazelle
         # Connection Management
         # ---------------------
         def process_connection(socket, app_id)
-            app, app_mode, port, tls = AppStore.get(app_id)
+            # Put application details in the socket storage as we negotiate protocols
+            details = AppStore.get(app_id)
+            socket.storage = details
+            tls = details[-1]
 
-            # Prepare a parser for the socket
-            parser = @parser_cache.pop || new_parser
-            parser.load(socket, port, app, app_mode)
-
-            # Hook up the socket and kick of TLS if required
-            socket.progress @on_progress
+            # Hook up the socket and kick off TLS if required
             if tls
                 socket.on_handshake @set_protocol
                 socket.start_tls(tls)
             else
-                parser.set_protocol(:http1)
+                set_protocol(socket, :http1)
             end
 
             # Start reading from the connection
-            socket.storage = parser
             socket.start_read
         end
 
@@ -143,13 +140,39 @@ module SpiderGazelle
         end
 
         def set_protocol(socket, version)
-            parser = socket.storage
-            parser.set_protocol(version == :h2 ? :http2 : :http1)
+            app, app_mode, port, tls = socket.storage
+
+            parser = if version == :h2
+                @http2_cache.pop || new_http2_parser
+            else
+                @http1_cache.pop || new_http1_parser
+            end
+
+            parser.load(socket, port, app, app_mode, tls)
+            socket.progress @on_progress
+            socket.storage = parser
         end
 
-        def new_parser
+
+        def new_http1_parser
+            @h1_parser_obj ||= ::HttpParser::Parser.new Http1Callbacks.new
+
             @parser_count += 1
-            Parser.new(@return_method)
+            Http1.new(@return_http1)
+        end
+
+        def return_http1(parser)
+            @http1_cache << parser
+        end
+
+        def new_http2_parser
+            raise NotImplementedError.new 'TODO:: Create HTTP2 parser class'
+            @parser_count += 1
+            Http2.new(@return_http2)
+        end
+
+        def return_http2(parser)
+            @http2_cache << parser
         end
     end
 end
