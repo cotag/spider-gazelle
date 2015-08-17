@@ -12,11 +12,13 @@ module SpiderGazelle
             tls: false,
             backlog: 5000,
             rackup: "#{Dir.pwd}/config.ru",
-            mode: :process
+            mode: :thread,
+            app_mode: :thread_pool,
+            isolate: true
         }.freeze
 
 
-        # Options that can't be used when more than one set of options is being appli
+        # Options that can't be used when more than one set of options is being applied
         APP_OPTIONS = [:port, :host, :verbose, :debug, :environment, :rackup, :mode, :backlog, :count, :name, :loglevel].freeze
         MUTUALLY_EXCLUSIVE = {
 
@@ -37,7 +39,7 @@ module SpiderGazelle
                     options[:port] = arg
                 end
 
-                opts.on "-a", "--address HOST", "bind to HOST address (default: 0.0.0.0)" do |arg|
+                opts.on "-h", "--host ADDRESS", "bind to address (default: 0.0.0.0)" do |arg|
                     options[:host] = arg
                 end
 
@@ -61,12 +63,33 @@ module SpiderGazelle
                     options[:mode] = arg
                 end
 
+                opts.on "-a", "--app-mode MODE", APP_MODE, "How should requests be processed (default: thread_pool)" do |arg|
+                    options[:host] = arg
+                end
+
                 opts.on "-b", "--backlog BACKLOG", Integer, "Number of pending connections allowed (default: 5000)" do |arg|
                     options[:backlog] = arg
                 end
 
-                opts.on "-c", "--count NUMBER", Integer, "Number of gazelle processes to launch (default: number of CPU cores)" do |arg|
-                    options[:count] = arg
+
+                # =================
+                # TLS Configuration
+                # =================
+                opts.on "-t", "--use-tls PRIVATE_KEY_FILE", "Enables TLS on the port specified using the provided private key in PEM format" do |arg|
+                    options[:tls] = true
+                    options[:private_key] = arg
+                end
+
+                opts.on "-tc", "--tls-chain-file CERT_CHAIN_FILE", "The certificate chain to provide clients" do |arg|
+                    options[:cert_chain] = arg
+                end
+
+                opts.on "-ts", "--tls-ciphers CIPHER_LIST", "A list of Ciphers that the server will accept" do |arg|
+                    options[:ciphers] = arg
+                end
+
+                opts.on "-tv", "--tls-verify-peer", "Do we want to verify the client connections? (default: false)" do
+                    options[:verify_peer] = true
                 end
 
 
@@ -77,8 +100,22 @@ module SpiderGazelle
                     options[:gazelle] = arg
                 end
 
+                opts.on "-f", "--file IPC", 'For internal use only' do |arg|
+                    options[:gazelle_ipc] = arg
+                end
+
+
                 opts.on "-s", "--spider PASSWORD", 'For internal use only' do |arg|
                     options[:spider] = arg
+                end
+
+
+                opts.on "-i", "--interactive-mode", 'Loads a multi-process version of spider-gazelle that can live update your app' do
+                    options[:isolate] = false
+                end
+
+                opts.on "-c", "--count NUMBER", Integer, "Number of gazelle processes to launch (default: number of CPU cores)" do |arg|
+                    options[:count] = arg
                 end
 
 
@@ -89,12 +126,8 @@ module SpiderGazelle
                     options[:update] = true
                 end
 
-                opts.on "-p", "--password PASSWORD", "Sets a password for performing updates" do |arg|
+                opts.on "-up", "--update-password PASSWORD", "Sets a password for performing updates" do |arg|
                     options[:password] = arg
-                end
-
-                opts.on "-n", "--name NAME", "Sets a name for referencing an application (default: rackup file path)" do |arg|
-                    options[:name] = arg
                 end
 
                 opts.on "-l", "--loglevel LEVEL", Logger::LEVELS, "Sets the log level" do |arg|
@@ -114,19 +147,32 @@ module SpiderGazelle
                 options[:rackup] = args.last
             end
 
-            # If this is not a signal or a gazelle process
-            # Then we want to include the default options
-            unless options[:gazelle] || options[:update]
+            # Unless this is a signal then we want to include the default options
+            unless options[:update]
                 options = DEFAULTS.merge(options)
 
                 unless File.exist? options[:rackup]
                     abort "No rackup found at #{options[:rackup]}"
                 end
 
-                options[:environment] ||= ENV['RAILS_ENV'] || 'development'
-                ENV['RAILS_ENV'] = options[:environment]
+                options[:environment] ||= ENV['RACK_ENV'] || 'development'
+                ENV['RACK_ENV'] = options[:environment]
 
 
+                # Ensure process is isolated if desired 
+                if options[:environment] == 'development'
+                    options[:isolate] = true
+                    @isolate = true
+                end
+
+                @isolate = true if options[:isolate]
+
+                if @isolate
+                    options[:isolate] = true
+
+                    # Closest match to process when isolating the process
+                    options[:mode] = :thread if options[:mode] == :process
+                end
             end
 
             # Enable verbose messages if requested
@@ -138,7 +184,7 @@ module SpiderGazelle
         def self.sanitize(args)
             # Use "\0" as this character won't be used in the command
             cmdline = args.join("\0")
-            components = cmdline.split("\0--\0")
+            components = cmdline.split("\0--", -1)
 
             # Ensure there is at least one component
             # (This will occur when no options are provided)
@@ -147,7 +193,7 @@ module SpiderGazelle
             # Parse the commandline options
             options = []
             components.each do |app_opts|
-                options << parse(app_opts.split("\0"))
+                options << parse(app_opts.split(/\0+/))
             end
 
             # Check for any invalid requests
@@ -169,6 +215,7 @@ module SpiderGazelle
                 # Ensure there are no conflicting ports
                 ports = [options[0][:port]]
                 options[1..-1].each do |opt|
+                    # If there is a clash we'll increment the port by 1
                     while ports.include? opt[:port]
                         opt[:port] += 1
                     end

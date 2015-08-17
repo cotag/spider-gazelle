@@ -1,37 +1,28 @@
 require "rack/handler"
 require "spider-gazelle"
-require "spider-gazelle/const"
 
 module Rack
-  module Handler
-    module SpiderGazelle
-      DEFAULT_OPTIONS = {
-        :Host => "0.0.0.0",
-        :Port => 8080,
-        :Verbose => false
-      }
+    module Handler
+        module SpiderGazelle
+            def self.run(app, options = {})
+                
+                # Replace the rackup with app
+                options = ::SpiderGazelle::Options::DEFAULTS.merge(options)
+                options.delete(:rackup)
+                options[:app] = app
 
-      def self.run(app, options = {})
-        options = DEFAULT_OPTIONS.merge(options)
+                # Can't pass an object over a pipe
+                options[:isolate] = true
+                options[:mode] = :thread if options[:mode] == :process
 
-        if options[:Verbose]
-          app = Rack::CommonLogger.new(app, STDOUT)
+                # Ensure the environment is set
+                options[:environment] ||= ENV['RACK_ENV'] || 'development'
+                ENV['RACK_ENV'] = options[:environment]
+
+                ::SpiderGazelle.launch([options])
+            end
         end
 
-        if options[:environment]
-          ENV["RACK_ENV"] = options[:environment].to_s
-        end
-
-        ::SpiderGazelle::Spider.run app, options
-      end
-
-      def self.valid_options
-        { "Host=HOST"       => "Hostname to listen on (default: 0.0.0.0)",
-          "Port=PORT"       => "Port to listen on (default: 8080)",
-          "Quiet"           => "Don't report each request" }
-      end
+        register :"spider-gazelle", SpiderGazelle
     end
-
-    register :"spider-gazelle", SpiderGazelle
-  end
 end

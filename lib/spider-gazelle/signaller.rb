@@ -4,7 +4,10 @@ require 'libuv'
 module SpiderGazelle
     class Signaller
         include Singleton
-        attr_reader :thread, :pipe
+
+
+        attr_reader   :thread, :pipe
+        attr_accessor :gazelle
 
 
         def initialize
@@ -18,10 +21,6 @@ module SpiderGazelle
             @client_check = @thread.defer
             @validated = [] # Set requires more processing
             @validating = {}
-
-            @thread.next_tick do
-                connect_to_sg_master
-            end
         end
 
         def request(options)
@@ -33,26 +32,30 @@ module SpiderGazelle
         end
 
         def check
+            @thread.next_tick do
+                connect_to_sg_master
+            end
             @client_check.promise
         end
 
         def shutdown
             defer = @thread.defer
 
-            if @is_connected
-                if @is_client
-                    # Close the SIGNAL_SERVER pipe
-                    # Check if a gazelle and request it to shutdown
-                    defer.resolve(true)
-                else
-                    # Signal all the gazelles to shutdown
-                    # Stop accepting new bindings
-                    # Wait up to 15 seconds for the existing connections to close
-                    # Close the SIGNAL_SERVER server binding
+            # Close the SIGNAL_SERVER pipe
+            @pipe.close if @is_connected
+
+            # Request spider or gazelle process to shutdown
+            if @gazelle
+                @gazelle.shutdown(defer)
+            end
+
+            if defined?(::SpiderGazelle::Spider)
+                Spider.instance.shutdown(defer)
+            else
+                # This must be the master process
+                @thread.next_tick do
                     defer.resolve(true)
                 end
-            else
-                defer.resolve(true)
             end
 
             defer.promise
@@ -88,7 +91,7 @@ module SpiderGazelle
 
                 @logger.verbose "Client connected to SG Master".freeze
                 
-                require 'uv-rays'
+                require 'uv-rays/buffered_tokenizer'
                 @parser = ::UV::BufferedTokenizer.new({
                     indicator: "\x02",
                     delimiter: "\x03"
@@ -142,9 +145,9 @@ module SpiderGazelle
                 client.finally do
                     @validated.delete client
                     @validating.delete client.object_id
-                    @logger.verbose { "Client <0x#{client.object_id.to_s(16)}> disconnected" }
+                    @logger.verbose { "Client <0x#{client.object_id.to_s(16)}> disconnected, #{@validated.length} remaining" }
 
-                    # If all the spider connections are gone then we want to shutdown
+                    # If all the process connections are gone then we want to shutdown
                     # This should never happen under normal conditions
                     if @validated.length == 0
                         Reactor.instance.shutdown
@@ -160,11 +163,11 @@ module SpiderGazelle
             @pipe.finally { @is_connected = false }
 
             # start listening
-            @pipe.listen(128)
+            @pipe.listen(INTERNAL_PIPE_BACKLOG)
         end
 
         def panic!(reason)
-            @logger.error "Master pipe went missing: #{reason}"
+            #@logger.error "Master pipe went missing: #{reason}"
             # Server most likely exited
             # We'll shutdown here
             Reactor.instance.shutdown

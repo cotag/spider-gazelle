@@ -1,66 +1,87 @@
 require 'thread'
-require 'radix/base'
-
 
 module SpiderGazelle
     class Gazelle
         module AppStore
-            # Basic compression using UTF (more efficient for ID's stored as strings)
-            B65 = ::Radix::Base.new(::Radix::BASE::B62)
-            B10 = ::Radix::Base.new(10)
-
-            @mutex = Mutex.new
-            @apps = ThreadSafe::Cache.new
-            @loaded = ThreadSafe::Cache.new
-            @count = 0
+            @apps = []
+            @loaded = {}
+            @critical = Mutex.new
+            @logger = Logger.instance
 
             # Load an app and assign it an ID
-            def self.load(app, options={})
-                is_rack_app = !app.is_a?(String)
-                app_key = is_rack_app ? app.class.name.to_sym : app.to_sym
-                id = @loaded[app_key]
+            def self.load(rackup, options)
+                begin
+                    @critical.synchronize {
+                        return if @loaded[rackup]
 
-                if id.nil?
-                    app, options = ::Rack::Builder.parse_file(app) unless is_rack_app
+                        app, opts = ::Rack::Builder.parse_file(rackup)
+                        tls = configure_tls(options)
 
-                    count = 0
-                    @mutex.synchronize { count = @count += 1 }
-                    id = Radix.convert(count, B10, B65).to_sym
-                    @apps[id] = app
-                    @loaded[app_key] = id
+                        val = [app, @options[:app_mode], options[:port], tls]
+                        @apps << val
+                        @loaded[rackup] = val
+                    }
+                rescue Exception => e
+                    # Prevent other threads from trying to load this too (might be in threaded mode)
+                    @loaded[rackup] = true
+                    @logger.print_error(e, "loading rackup #{rackup}")
+                    Reactor.instance.shutdown
                 end
-
-                id
             end
 
-            # Manually load an app
-            def self.add(app)
-                id = @loaded[app.__id__]
+            # Add an already loaded application
+            def self.add(app, options)
+                @critical.synchronize {
+                    obj_id = app.object_id
+                    return if @loaded[obj_id]
+                    
+                    id = @apps.length
 
-                if id.nil?
-                    count = 0
-                    @mutex.synchronize { count = @count += 1 }
-                    id = Radix.convert(count, B10, B65).to_sym
-                    @apps[id] = app
-                    @loaded[app.__id__] = id
-                end
+                    app, opts = ::Rack::Builder.parse_file(rackup)
+                    tls = configure_tls(options)
 
-                id
+                    val = [app, APP_MODE[@options[:app_mode]], options[:port], tls]
+                    @apps << val
+                    @loaded[obj_id] = val
+
+                    id
+                }
             end
 
             # Lookup an application
             def self.lookup(app)
-                if app.is_a?(String) || app.is_a?(Symbol)
-                    @apps[@loaded[app.to_sym]]
-                else
-                    @apps[@loaded[app.__id__]]
-                end
+                @loaded[app.to_s]
             end
 
             # Get an app using the id directly
             def self.get(id)
-                id = id.to_sym if id.is_a?(String)
-                @apps[id]
+                @apps[id.to_i]
+            end
+
+            PROTOCOLS = ['h2'.freeze, 'http/1.1'.freeze].freeze
+            FALLBACK = 'http/1.1'.freeze
+            def self.configure_tls(opts)
+                return false unless opts[:tls]
+
+                tls = {
+                    protocols: PROTOCOLS,
+                    fallback: FALLBACK
+                }
+                tls[:verify_peer] = true if opts[:verify_peer]
+                tls[:ciphers] = opts[:ciphers] if opts[:ciphers]
+
+                # NOTE:: Blocking reads however only during load so it's OK
+                private_key = opts[:private_key]
+                if private_key
+                    tls[:private_key] = ::FFI::MemoryPointer.from_string(File.read(private_key))
+                end
+
+                cert_chain = opts[:cert_chain]
+                if cert_chain
+                    tls[:cert_chain] = ::FFI::MemoryPointer.from_string(File.read(cert_chain))
+                end
+
+                tls
             end
         end
     end

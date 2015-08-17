@@ -13,6 +13,7 @@ module SpiderGazelle
             @logger = ::SpiderGazelle::Logger.instance
             @running = false
             @shutdown = method(:shutdown)
+            @shutdown_called = false
         end        
 
         def run(&block)
@@ -32,12 +33,23 @@ module SpiderGazelle
         end
 
         def shutdown(_ = nil)
-            # Signaller will manage the shutdown of the gazelles
-            signaller = Signaller.instance.shutdown
-            signaller.finally do
-                @thread.stop
-                # New line on exit
-                puts "\nSpider-Gazelle leaps through the veldt\n" unless @logger.pipe
+            if @shutdown_called
+                @logger.warn "Shutdown called twice! Callstack:\n#{caller.join("\n")}"
+                return
+            end
+
+            @thread.schedule do
+                return if @shutdown_called
+                @shutdown_called = true
+
+                # Signaller will manage the shutdown of the gazelles
+                signaller = Signaller.instance.shutdown
+                signaller.finally do
+                    @thread.stop
+                    # New line on exit to avoid any ctrl-c characters
+                    # We check for pipe as we only want the master process to print this
+                    puts "\nSpider-Gazelle leaps through the veldt\n" unless @logger.pipe
+                end
             end
         end
 

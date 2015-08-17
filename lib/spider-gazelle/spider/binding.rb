@@ -9,22 +9,20 @@ module SpiderGazelle
             def initialize(iterator, app_id, options)
                 if options[:mode] == :no_ipc
                     @delegate = method(:direct_delegate)
-                    @select_gazelle = iterator
+                    @gazelle = iterator
                 else
                     @delegate = method(:delegate)
-                    @gazelle = iterator
+                    @select_gazelle = iterator
                 end
 
-                @app_id = app_id
                 @options = options
 
                 @logger = Logger.instance
                 @signaller = Signaller.instance
                 @thread = @signaller.thread
 
-                tls = @options[:tls] ? USE_TLS : NO_TLS
-                @port = @options[:port] || (@tls ? 443 : 80)
-                @indicator = "#{tls} #{@port} #{@app_id}"
+                @port = @options[:port]
+                @indicator = app_id.to_s.freeze
 
                 # Connection management functions
                 @new_connection = method :new_connection
@@ -75,10 +73,10 @@ module SpiderGazelle
                 gazelle = @gazelle
                 indicator = @indicator
 
-                # Keep the stack level down
+                # Keep the stack level low
                 # Might be over thinking this?
                 @thread.next_tick do
-                    gazelle.__send__(:new_connection, indicator, client)
+                    gazelle.__send__(:process_connection, client, indicator)
                 end
             end
         end

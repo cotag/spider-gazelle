@@ -5,6 +5,7 @@ require 'thread'
 module SpiderGazelle
     VERSION = '2.0.0.alpha1'.freeze
     EXEC_NAME = 'sg2'.freeze
+    INTERNAL_PIPE_BACKLOG = 128
 
     # Signaller is used to communicate:
     # * command line requests
@@ -16,14 +17,10 @@ module SpiderGazelle
     # * Track gazelles
     # * Signal shutdown as required
     # * Pass sockets
-    SPIDER_SERVER = '/tmp/sg-spider.pipe'.freeze
-
-    # Encrypted
-    USE_TLS = 'E'.freeze
-    # Clear
-    NO_TLS = 'C'.freeze
+    SPIDER_SERVER = '/tmp/sg-spider.pipe.'.freeze
 
     MODES = [:process, :thread, :no_ipc].freeze
+    APP_MODE = [:thread_pool, :fiber_pool, :libuv, :eventmachine, :celluloid]
 
 
     class LaunchControl
@@ -43,43 +40,24 @@ module SpiderGazelle
 
             @args = args
 
+            launch(options)
+        end
+
+        def launch(options)
             # Start the Libuv Event Loop
             reactor = ::SpiderGazelle::Reactor.instance
             reactor.run do
 
                 # Check if SG is already running
                 signaller = ::SpiderGazelle::Signaller.instance
-                signaller.check.then do |running|
-                    logger = ::SpiderGazelle::Logger.instance
 
-                    begin
-                        # What do we want to do?
-                        master = options[0]
-
-                        if running
-                            logger.verbose "SG is already running".freeze
-
-                            if master[:spider]
-                                logger.verbose "Starting Spider".freeze
-                                start_spider(signaller, logger, options)
-                            elsif master[:gazelle]
-                                logger.verbose "Starting Gazelle".freeze
-                                start_gazelle(signaller, logger, options)
-                            else
-                                logger.verbose "Sending signal to SG Master".freeze
-                                signal_master(reactor, signaller, logger, options)
-                            end
-
-                        elsif master[:debug]
-                            logger.verbose "SG is now running in debug mode".freeze
-                        else
-                            logger.verbose "SG was not running, launching Spider".freeze
-                            launch_spider(args)
-                        end
-                    rescue => e
-                        logger.verbose "Error performing requested operation".freeze
-                        logger.print_error(e)
-                        shutdown
+                if options[0][:isolate]
+                    # This ensures this process will load the spider code
+                    options[0][:spider] = true
+                    boot(true, signaller, options)
+                else
+                    signaller.check.then do |running|
+                        boot(running, signaller, options)
                     end
                 end
             end
@@ -115,7 +93,7 @@ module SpiderGazelle
 
         # This is called when a spider process starts
         def start_spider(signaller, logger, options)
-            logger.set_client signaller.pipe
+            logger.set_client signaller.pipe unless options[0][:isolate]
 
             require 'spider-gazelle/spider'
             Spider.instance.run!(options)
@@ -130,7 +108,7 @@ module SpiderGazelle
             logger.set_client signaller.pipe
 
             require 'spider-gazelle/gazelle'
-            ::SpiderGazelle::Gazelle.new(:process).run!(options)
+            ::SpiderGazelle::Gazelle.new(logger.thread, :process).run!(options)
         end
 
 
@@ -149,6 +127,42 @@ module SpiderGazelle
             end
             promise.finally do
                 reactor.shutdown
+            end
+        end
+
+
+        protected
+
+
+        def boot(running, signaller, options)
+            logger = ::SpiderGazelle::Logger.instance
+
+            begin
+                # What do we want to do?
+                master = options[0]
+
+                if running
+                    if master[:spider]
+                        logger.verbose "Starting Spider".freeze
+                        start_spider(signaller, logger, options)
+                    elsif master[:gazelle]
+                        logger.verbose "Starting Gazelle".freeze
+                        start_gazelle(signaller, logger, options)
+                    else
+                        logger.verbose "Sending signal to SG Master".freeze
+                        signal_master(reactor, signaller, logger, options)
+                    end
+
+                elsif master[:debug]
+                    logger.verbose "SG is now running in debug mode".freeze
+                else
+                    logger.verbose "SG was not running, launching Spider".freeze
+                    launch_spider(@args)
+                end
+            rescue => e
+                logger.verbose "Error performing requested operation".freeze
+                logger.print_error(e)
+                shutdown
             end
         end
     end
