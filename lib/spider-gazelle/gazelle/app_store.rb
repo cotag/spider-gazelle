@@ -17,7 +17,7 @@ module SpiderGazelle
                         app, opts = ::Rack::Builder.parse_file(rackup)
                         tls = configure_tls(options)
 
-                        val = [app, @options[:app_mode], options[:port], tls]
+                        val = [app, options[:app_mode], options[:port], tls]
                         @apps << val
                         @loaded[rackup] = val
                     }
@@ -36,11 +36,9 @@ module SpiderGazelle
                     return if @loaded[obj_id]
                     
                     id = @apps.length
-
-                    app, opts = ::Rack::Builder.parse_file(rackup)
                     tls = configure_tls(options)
 
-                    val = [app, APP_MODE[@options[:app_mode]], options[:port], tls]
+                    val = [app, options[:app_mode], options[:port], tls]
                     @apps << val
                     @loaded[obj_id] = val
 

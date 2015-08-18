@@ -1,5 +1,11 @@
-require 'singleton'
 require 'thread'
+require 'singleton'
+
+
+require 'spider-gazelle/options'
+require 'spider-gazelle/logger'
+require 'spider-gazelle/reactor'
+require 'spider-gazelle/signaller'
 
 
 module SpiderGazelle
@@ -31,19 +37,15 @@ module SpiderGazelle
 
 
         def exec(args)
-            require 'spider-gazelle/options'
             options = SpiderGazelle::Options.sanitize(args)
-
-            require 'spider-gazelle/logger'
-            require 'spider-gazelle/reactor'
-            require 'spider-gazelle/signaller'
-
             @args = args
-
             launch(options)
         end
 
         def launch(options)
+            # Enable verbose messages if requested
+            Logger.instance.verbose! if options[0][:verbose]
+
             # Start the Libuv Event Loop
             reactor = ::SpiderGazelle::Reactor.instance
             reactor.run do

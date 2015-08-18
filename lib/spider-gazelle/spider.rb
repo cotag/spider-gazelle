@@ -25,6 +25,7 @@ module SpiderGazelle
             @loading = {}     # mode => load defer
             @bindings = {}    # port => binding
             @iterators = {}   # mode => gazelle round robin iterator
+            @iterator_source = {}   # mode => gazelle pipe array (iterator source)
 
             @password = SecureRandom.hex
 
@@ -148,6 +149,7 @@ module SpiderGazelle
                 if gazelles.length == @counts[mode_sym]
                     @logger.verbose { "#{mode.capitalize} gazelles are ready" }
 
+                    @iterator_source[mode_sym] = gazelles
                     @iterators[mode_sym] = gazelles.cycle
                     @loading[mode_sym].resolve(true)
                 end
@@ -163,7 +165,7 @@ module SpiderGazelle
 
             # Load the different types of gazelles required
             @options.each do |app|
-                @logger.info "Loading: #{app[:rackup]}"
+                @logger.info "Loading: #{app[:rackup]}" if app[:rackup]
 
                 mode = app[:mode]
                 loaded << load_gazelles(mode, app[:count], @options) unless @loading[mode]
@@ -191,6 +193,7 @@ module SpiderGazelle
                 @gazelles[:no_ipc] = gaz
 
                 # Setup the round robin
+                @iterator_source[mode] = gaz
                 @iterators[mode] = gaz
                 defer.resolve(true)
             else
@@ -265,7 +268,7 @@ module SpiderGazelle
 
             @options.each_index do |id|
                 options = @options[id]
-                iterator = @iterators[options[:port]]
+                iterator = @iterators[options[:mode]]
 
                 binding = @bindings[options[:port]] = Binding.new(iterator, id.to_s, options)
                 binding.bind
@@ -297,17 +300,14 @@ module SpiderGazelle
             @bound = false
             promises = []
 
-            @iterators.each do |mode, itr|
+            @iterator_source.each do |mode, gazelles|
                 if mode == :no_ipc
                     # itr is a gazelle in no_ipc mode
                     defer = @thread.defer
-                    itr.shutdown(defer)
+                    gazelles.shutdown(defer)
                     promises << defer.promise
 
                 else
-                    # Extract the array from the iterator
-                    gazelles = itr.entries 1
-
                     # End communication with the gazelle threads / processes
                     gazelles.each do |gazelle|
                         promises << gazelle.close

@@ -19,7 +19,7 @@ module Rack
                 options[:environment] ||= ENV['RACK_ENV'] || 'development'
                 ENV['RACK_ENV'] = options[:environment]
 
-                ::SpiderGazelle.launch([options])
+                ::SpiderGazelle::LaunchControl.instance.launch([options])
             end
         end
 

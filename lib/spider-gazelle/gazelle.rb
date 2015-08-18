@@ -1,7 +1,8 @@
 require 'spider-gazelle/gazelle/app_store'
+require 'spider-gazelle/gazelle/request'
 require 'spider-gazelle/gazelle/http1'
 require 'http-parser'     # C based, fast, http parser
-require 'rack'            # Ruby webserver abstraction
+
 
 # Reactor aware websocket implementation
 #require "spider-gazelle/upgrades/websocket"
@@ -155,10 +156,10 @@ module SpiderGazelle
 
 
         def new_http1_parser
-            @h1_parser_obj ||= ::HttpParser::Parser.new Http1Callbacks.new
+            @h1_parser_obj ||= Http1::Http1Callbacks.new
 
             @parser_count += 1
-            Http1.new(@return_http1)
+            Http1.new(@return_http1, @h1_parser_obj, @thread, @logger)
         end
 
         def return_http1(parser)

@@ -158,25 +158,9 @@ module SpiderGazelle
                 options[:environment] ||= ENV['RACK_ENV'] || 'development'
                 ENV['RACK_ENV'] = options[:environment]
 
-
-                # Ensure process is isolated if desired 
-                if options[:environment] == 'development'
-                    options[:isolate] = true
-                    @isolate = true
-                end
-
-                @isolate = true if options[:isolate]
-
-                if @isolate
-                    options[:isolate] = true
-
-                    # Closest match to process when isolating the process
-                    options[:mode] = :thread if options[:mode] == :process
-                end
+                # isolation and process mode don't mix
+                options[:isolate] = false if options[:mode] == :process
             end
-
-            # Enable verbose messages if requested
-            Logger.instance.verbose! if options[:verbose]
 
             options
         end
