@@ -105,20 +105,31 @@ module SpiderGazelle
             rescue
             end
 
+            shutdown = false
             check = method(:check_credentials)
             @pipe.bind(@pipe_file) do |client|
                 @logger.verbose { "Gazelle <0x#{client.object_id.to_s(16)}> connection made" }
 
                 # Shutdown if there is an error with any of the gazelles
                 client.catch do |error|
-                    @logger.print_error(error, "Gazelle <0x#{client.object_id.to_s(16)}> connection error")
-                    @signaller.general_failure
+                    begin
+                        @logger.print_error(error, "Gazelle <0x#{client.object_id.to_s(16)}> connection error")
+                    rescue
+                    end
                 end
 
                 # Client closed gracefully
                 client.finally do
-                    @gazelles.delete client
-                    @logger.verbose { "Gazelle <0x#{client.object_id.to_s(16)}> disconnected" }
+                    begin
+                        @logger.verbose { "Gazelle <0x#{client.object_id.to_s(16)}> disconnected" }
+                    rescue
+                    ensure
+                        @gazelles.delete client
+                        if !shutdown
+                            shutdown = true
+                            @signaller.general_failure
+                        end
+                    end
                 end
 
                 client.progress check

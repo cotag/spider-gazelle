@@ -70,6 +70,8 @@ module SpiderGazelle
 
         def general_failure
             @pipe.write "\x02Signaller general_failure\x03".freeze
+        rescue
+        ensure
             Reactor.instance.shutdown
         end
 

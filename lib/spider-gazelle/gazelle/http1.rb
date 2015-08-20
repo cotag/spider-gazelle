@@ -1,4 +1,8 @@
 
+require 'http-parser'     # C based, fast, http parser
+require 'spider-gazelle/gazelle/request'
+
+
 module SpiderGazelle
     class Gazelle
         class Http1
@@ -72,8 +76,20 @@ module SpiderGazelle
                 @logger = logger
 
                 @work = method(:work)
+                @work_complete = proc { |result|
+                    if @processing.is_async
+                        if result.is_a? Fixnum
+                            # TODO:: setup timeout for async response
+                        end
+                    else
+                        # Complete the current request
+                        @processing.defer.resolve(result)
+                    end
+                }
+
                 @async_callback = method(:async_callback)
                 @queue_response = method(:queue_response)
+                @on_close = method(:on_close)
 
                 # The parser state for this instance
                 @state = ::HttpParser::Parser.new_instance do |inst|
@@ -118,28 +134,29 @@ module SpiderGazelle
                 @remote_ip = socket.peername[0]
                 @scheme = tls ? HTTPS : HTTP
 
-                socket.finally &method(:on_close)
+                socket.finally @on_close
             end
 
             def on_close
-                @socket.progress &DUMMY_PROGRESS
+                @socket.progress DUMMY_PROGRESS
+                @socket.storage = nil
                 reset
                 @return_method.call(self)
             end
 
             def reset
-                @socket = nil
-                @port = nil
                 @app = nil
-                @mode = nil
-                @remote_ip = nil
+                @socket = nil
+                # @port = nil
+                # @mode = nil
+                # @remote_ip = nil
                 # @scheme = nil  # Safe to leave this
 
                 @processing = nil
                 @transmitting = nil
 
-                @requests.clear
-                @responses.clear
+                @requests = []
+                @responses = []
                 @state.reset!
             end
 
@@ -187,22 +204,14 @@ module SpiderGazelle
                 end
             end
 
+            WORKER_ERROR = proc { |error|
+                @logger.print_error error, 'critical error'
+                Reactor.instance.shutdown
+            }
             def exec_on_thread_pool
                 promise = @thread.work @work
-                promise.catch do |error|
-                    @logger.print_error error, 'critical error'
-                    Reactor.instance.shutdown
-                end
-                promise.then do |result|
-                    if @processing.is_async
-                        if result.is_a? Fixnum
-                            # TODO:: setup timeout for async response
-                        end
-                    else
-                        # Complete the current request
-                        @processing.defer.resolve(result)
-                    end
-                end
+                promise.then @work_complete
+                promise.catch WORKER_ERROR
             end
 
             EMPTY_RESPONSE = [''.freeze].freeze
@@ -434,7 +443,7 @@ module SpiderGazelle
             # This occurs on upgrade requests that are handled
             def unlink
                 # Unlink the progress callback (prevent funny business)
-                @socket.progress &DUMMY_PROGRESS
+                @socket.progress DUMMY_PROGRESS
                 reset
                 @return_method.call(self)
             end
@@ -473,6 +482,7 @@ module SpiderGazelle
 
             ERROR_500_RESPONSE = "HTTP/1.1 500 Internal Server Error\r\n\r\n".freeze
             def send_internal_error
+                @logger.info "Internal error"
                 @socket.stop_read
                 @socket.write ERROR_500_RESPONSE
                 @socket.shutdown

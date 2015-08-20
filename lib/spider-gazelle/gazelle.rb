@@ -1,7 +1,7 @@
+require "rack"            # Ruby webserver abstraction
+require "rack/lock_patch" # Serialize execution in development mode
 require 'spider-gazelle/gazelle/app_store'
-require 'spider-gazelle/gazelle/request'
 require 'spider-gazelle/gazelle/http1'
-require 'http-parser'     # C based, fast, http parser
 
 
 # Reactor aware websocket implementation
@@ -84,7 +84,7 @@ module SpiderGazelle
                 authenticate
             end
 
-            @pipe.catch do |reason|
+            @pipe.catch do |error|
                 @logger.print_error(error)
             end
 
@@ -130,8 +130,8 @@ module SpiderGazelle
                 set_protocol(socket, :http1)
             end
 
-            # Start reading from the connection
             socket.start_read
+            socket.enable_nodelay
         end
 
         def on_progress(data, socket)
@@ -163,7 +163,7 @@ module SpiderGazelle
         end
 
         def return_http1(parser)
-            @http1_cache << parser
+            @http1_cache.push parser
         end
 
         def new_http2_parser

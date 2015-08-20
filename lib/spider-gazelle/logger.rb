@@ -88,7 +88,11 @@ module SpiderGazelle
             msg << ":\n" unless msg.empty?
             msg << "#{e.message}\n"
             backtrace = e.backtrace if e.respond_to?(:backtrace)
-            msg << "#{backtrace.join("\n")}\n" if backtrace
+            if backtrace
+                msg << "#{backtrace.join("\n")}\n"
+            elsif trace.nil?
+                trace = caller
+            end
             msg << "Caller backtrace:\n#{trace.join("\n")}\n" if trace
             error(msg)
         end
