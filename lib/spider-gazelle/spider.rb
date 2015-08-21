@@ -7,6 +7,20 @@ module SpiderGazelle
         include Singleton
 
 
+        # This allows applications to recieve a callback once the server has
+        # completed loading the applications. Port binding is in progress
+        def loaded
+            @load_complete.promise
+        end
+
+        # Applications can query the availability of various modes to share resources
+        def in_mode?(mode)
+            !!@loading[mode.to_sym]
+        end
+
+        attr_reader :logger, :threads
+
+
         def initialize
             @logger = Logger.instance
             @signaller = Signaller.instance
@@ -32,6 +46,8 @@ module SpiderGazelle
             @running = true
             @loaded = false
             @bound = false
+
+            @load_complete = @thread.defer
         end
 
         def run!(options)
@@ -47,7 +63,8 @@ module SpiderGazelle
         # Load gazelles and make the required bindings
         def ready
             start_gazelle_server
-            load_applications.then do
+            load_promise = load_applications
+            load_promise.then do
                 # Check a shutdown request didn't occur as we were loading
                 if @running
                     @logger.verbose "All gazelles running".freeze
@@ -60,6 +77,9 @@ module SpiderGazelle
                     perform_shutdown
                 end
             end
+
+            # Provide applications with a load complete callback
+            @load_complete.reaolve(load_promise)
         end
 
         # Load gazelles and wait for the bindings to be sent

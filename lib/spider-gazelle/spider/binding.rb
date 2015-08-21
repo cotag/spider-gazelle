@@ -60,7 +60,7 @@ module SpiderGazelle
             DELEGATE_ERR = proc { |error|
                 client.close
                 begin
-                    @logger.print_error(error, "delegating socket to gazelle")
+                    Logger.instance.print_error(error, "delegating socket to gazelle")
                 rescue
                 end
             }
