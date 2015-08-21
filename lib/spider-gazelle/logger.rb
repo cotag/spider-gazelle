@@ -4,6 +4,7 @@ module SpiderGazelle
     class Logger
         include Singleton
         attr_reader :level, :thread, :pipe
+        attr_accessor :formatter
 
 
         LEVEL = {
