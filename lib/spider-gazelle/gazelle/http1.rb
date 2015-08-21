@@ -68,6 +68,9 @@ module SpiderGazelle
             end
 
 
+            Hijack = Struct.new :socket, :env
+
+
             def initialize(return_method, callbacks, thread, logger)
                 # The HTTP parser callbacks object for this thread
                 @return_method = return_method
@@ -77,19 +80,19 @@ module SpiderGazelle
 
                 @work = method(:work)
                 @work_complete = proc { |result|
-                    if @processing.is_async
+                    request = @processing
+                    if request.is_async && !request.hijacked
                         if result.is_a? Fixnum
                             # TODO:: setup timeout for async response
                         end
                     else
                         # Complete the current request
-                        @processing.defer.resolve(result)
+                        request.defer.resolve(result)
                     end
                 }
 
                 @async_callback = method(:async_callback)
                 @queue_response = method(:queue_response)
-                @on_close = method(:on_close)
 
                 # The parser state for this instance
                 @state = ::HttpParser::Parser.new_instance do |inst|
@@ -134,29 +137,38 @@ module SpiderGazelle
                 @remote_ip = socket.peername[0]
                 @scheme = tls ? HTTPS : HTTP
 
-                socket.finally @on_close
+                set_on_close(socket)
+            end
+
+            # Only close the socket we are meaning to close
+            def set_on_close(socket)
+                socket.finally { on_close if socket == @socket }
             end
 
             def on_close
+                # Unlink the progress callback (prevent funny business)
                 @socket.progress DUMMY_PROGRESS
                 @socket.storage = nil
                 reset
                 @return_method.call(self)
             end
+            alias_method :unlink, :on_close
 
             def reset
                 @app = nil
                 @socket = nil
+                @remote_ip = nil
+
+                # Safe to leave these
                 # @port = nil
                 # @mode = nil
-                # @remote_ip = nil
-                # @scheme = nil  # Safe to leave this
+                # @scheme = nil
 
                 @processing = nil
                 @transmitting = nil
 
-                @requests = []
-                @responses = []
+                @requests.clear
+                @responses.clear
                 @state.reset!
             end
 
@@ -234,7 +246,7 @@ module SpiderGazelle
             # Process a response that was marked as async. Save the data if the request hasn't responded yet
             def callback(data)
                 request = @processing
-                if request && request.deferred
+                if request && request.is_async
                     request.defer.resolve(data)
                 else
                     @logger.warn "Received async callback and there are no pending requests. Data was:\n#{data}"
@@ -271,8 +283,9 @@ module SpiderGazelle
                 if request.hijacked
                     # Unlink the management of the socket
                     # Then forward the raw socket to the upgrade handler
+                    socket = @socket
                     unlink
-                    request.hijacked.resolve [@socket, request.env]
+                    request.hijacked.resolve Hijack.new(socket, request.env)
 
                 elsif @socket.closed
                     body = result[2]
@@ -437,15 +450,6 @@ module SpiderGazelle
             HTTP_STATUS_DEFAULT = proc { 'CUSTOM'.freeze }
             def fetch_code(status)
                 HTTP_STATUS_CODES.fetch(status, &HTTP_STATUS_DEFAULT)
-            end
-
-            # Unlinks the connection from the rack app
-            # This occurs on upgrade requests that are handled
-            def unlink
-                # Unlink the progress callback (prevent funny business)
-                @socket.progress DUMMY_PROGRESS
-                reset
-                @return_method.call(self)
             end
 
 

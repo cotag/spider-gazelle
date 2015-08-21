@@ -20,7 +20,7 @@ module SpiderGazelle
             @socket, @env = tcp, env
 
             # Initialise the promise
-            super @socket.loop, @socket.loop.defer
+            super tcp.loop, tcp.loop.defer
 
             scheme = env[RACK_URL_SCHEME] == HTTPS ? 'wss://' : 'ws://'
             @url = scheme + env[HTTP_HOST] + env[REQUEST_URI]

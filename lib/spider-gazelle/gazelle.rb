@@ -5,7 +5,7 @@ require 'spider-gazelle/gazelle/http1'
 
 
 # Reactor aware websocket implementation
-#require "spider-gazelle/upgrades/websocket"
+require "spider-gazelle/upgrades/websocket"
 
 
 module SpiderGazelle

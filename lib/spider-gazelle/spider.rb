@@ -79,7 +79,7 @@ module SpiderGazelle
             end
 
             # Provide applications with a load complete callback
-            @load_complete.reaolve(load_promise)
+            @load_complete.resolve(load_promise)
         end
 
         # Load gazelles and wait for the bindings to be sent

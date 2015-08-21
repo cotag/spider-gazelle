@@ -51,7 +51,6 @@ module SpiderGazelle
             @header = ''
             @url = ''
             @env = PROTO_ENV.dup
-            @thread = thread
             @env[SERVER_PORT] = port
             @env[REMOTE_ADDR] = remote_ip
             @env[RACK_URL_SCHEME] = scheme
@@ -132,7 +131,8 @@ module SpiderGazelle
             end
 
             # Execute the request
-            resp = ::Kernel.catch(:async) { @app.call @env }
+            # NOTE:: Catch was overloaded by Promise so this does the 
+            resp = ruby_catch(:async) { @app.call @env }
             if resp.nil? || resp[0] == -1
                 @is_async = true
 
@@ -148,7 +148,7 @@ module SpiderGazelle
         protected
 
         def hijack
-            @hijacked = @thread.defer
+            @hijacked = @loop.defer
             @env.delete HIJACK # don't want to hold a reference to this request object
             @env[HIJACK_IO] = @hijacked.promise
         end
