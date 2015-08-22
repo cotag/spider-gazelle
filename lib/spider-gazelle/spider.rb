@@ -24,6 +24,9 @@ module SpiderGazelle
     }
 
     attr_reader :state, :mode, :threads, :logger
+    def in_mode?(mode)
+      mode.to_sym == @mode
+    end
 
     extend Forwardable
     def_delegators :@web, :run
