@@ -1,0 +1,4 @@
+#!/usr/bin/env ruby
+
+require 'spider-gazelle'
+SpiderGazelle::LaunchControl.instance.exec(ARGV)

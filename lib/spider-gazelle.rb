@@ -9,8 +9,8 @@ require 'spider-gazelle/signaller'
 
 
 module SpiderGazelle
-    VERSION = '2.0.0.alpha1'.freeze
-    EXEC_NAME = 'sg2'.freeze
+    VERSION = '2.0.0'.freeze
+    EXEC_NAME = 'sg'.freeze
     INTERNAL_PIPE_BACKLOG = 128
 
     # Signaller is used to communicate:

@@ -34,7 +34,7 @@ Gem::Specification.new do |s|
     s.extra_rdoc_files = ["README.md"]
 
     s.bindir = 'bin'
-    s.executables = ['sg2']
+    s.executables = [SpiderGazelle::EXEC_NAME]
 
     s.require_paths = ["lib"]
 end
