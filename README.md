@@ -1,6 +1,7 @@
 # spider-gazelle
 
 [<img src="https://codeclimate.com/github/cotag/spider-gazelle.png" />](https://codeclimate.com/github/cotag/spider-gazelle)
+[![Build Status](https://travis-ci.org/cotag/spider-gazelle.svg?branch=master)](https://travis-ci.org/cotag/spider-gazelle)
 
 
 A fast, parallel and concurrent web server for ruby
