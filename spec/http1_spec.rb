@@ -76,6 +76,8 @@ describe ::SpiderGazelle::Gazelle::Http1 do
 
     it "should process a single request and close the connection", http1: true do
         app = lambda do |env|
+            expect(env['SERVER_PORT']).to eq(80)
+
             body = 'Hello, World!'
             [200, {'Content-Type' => 'text/plain', 'Content-Length' => body.length.to_s}, [body]]
         end
@@ -133,7 +135,7 @@ describe ::SpiderGazelle::Gazelle::Http1 do
             expect(env['REQUEST_PATH']).to eq('/')
             expect(env['QUERY_STRING']).to eq('test=ing')
             expect(env['SERVER_NAME']).to eq('spider.gazelle.net')
-            expect(env['SERVER_PORT']).to eq(80)
+            expect(env['SERVER_PORT']).to eq(3000)
             expect(env['REMOTE_ADDR']).to eq('127.0.0.1')
             expect(env['rack.url_scheme']).to eq('http')
 
@@ -143,7 +145,7 @@ describe ::SpiderGazelle::Gazelle::Http1 do
 
         @loop.run {
             @http1.load(@socket, @port, app, @app_mode, @tls)
-            @http1.parse("GET /?test=ing HTTP/1.1\r\nHost: spider.gazelle.net\r\nConnection: Close\r\n\r\n")
+            @http1.parse("GET /?test=ing HTTP/1.1\r\nHost: spider.gazelle.net:3000\r\nConnection: Close\r\n\r\n")
         }
 
         expect(@shutdown_called).to be == 1

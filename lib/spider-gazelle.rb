@@ -9,7 +9,7 @@ require 'spider-gazelle/signaller'
 
 
 module SpiderGazelle
-    VERSION = '2.0.0'.freeze
+    VERSION = '2.0.1'.freeze
     EXEC_NAME = 'sg'.freeze
     INTERNAL_PIPE_BACKLOG = 128
 

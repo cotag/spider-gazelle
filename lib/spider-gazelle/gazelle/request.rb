@@ -111,7 +111,7 @@ module SpiderGazelle
             if host = @env[HTTP_HOST]
                 if colon = host.index(COLON)
                     @env[SERVER_NAME] = host[0, colon]
-                    @env[SERVER_PORT] = host[colon+1, host.bytesize]
+                    @env[SERVER_PORT] = host[colon + 1, host.bytesize].to_i
                 else
                     @env[SERVER_NAME] = host
                 end
