@@ -29,7 +29,7 @@ Look out! Here comes the Spidergazelle!
 
 ## Options
 
-For other command line options look at [the source](/bin/sg)
+For other command line options look at [the source](/lib/spider-gazelle/options.rb)
 
 
 ## Community support
