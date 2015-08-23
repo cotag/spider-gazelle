@@ -2,6 +2,7 @@ require 'thread'
 require 'singleton'
 
 
+require 'spider-gazelle/version'
 require 'spider-gazelle/options'
 require 'spider-gazelle/logger'
 require 'spider-gazelle/reactor'
@@ -9,8 +10,6 @@ require 'spider-gazelle/signaller'
 
 
 module SpiderGazelle
-    VERSION = '2.0.1'.freeze
-    EXEC_NAME = 'sg'.freeze
     INTERNAL_PIPE_BACKLOG = 128
 
     # Signaller is used to communicate:

@@ -1,3 +1,4 @@
+require 'spider-gazelle'
 require 'spider-gazelle/gazelle/http1'
 
 

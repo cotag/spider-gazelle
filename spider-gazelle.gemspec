@@ -1,7 +1,7 @@
 # -*- encoding: utf-8 -*-
 $:.push File.expand_path("../lib", __FILE__)
 
-require 'spider-gazelle'
+require 'spider-gazelle/version'
 version = SpiderGazelle::VERSION
 
 Gem::Specification.new do |s|
