@@ -16,6 +16,7 @@ module SpiderGazelle
         GATEWAY_INTERFACE = "GATEWAY_INTERFACE".freeze
         CGI_VER = "CGI/1.2".freeze
         SERVER = "SpiderGazelle".freeze
+        LOCALHOST = 'localhost'.freeze
 
 
         # TODO:: Add HTTP headers to the env and capitalise them and prefix them with HTTP_
@@ -113,11 +114,9 @@ module SpiderGazelle
                     @env[SERVER_PORT] = host[colon+1, host.bytesize]
                 else
                     @env[SERVER_NAME] = host
-                    @env[SERVER_PORT] = PROTO_ENV[SERVER_PORT]
                 end
             else
                 @env[SERVER_NAME] = LOCALHOST
-                @env[SERVER_PORT] = PROTO_ENV[SERVER_PORT]
             end
 
             # Provide hijack options if this is an upgrade request

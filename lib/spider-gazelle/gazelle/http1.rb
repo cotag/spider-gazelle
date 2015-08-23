@@ -6,7 +6,7 @@ require 'spider-gazelle/gazelle/request'
 module SpiderGazelle
     class Gazelle
         class Http1
-            class Http1Callbacks
+            class Callbacks
                 def initialize
                     @parser = ::HttpParser::Parser.new self
                     @logger = Logger.instance

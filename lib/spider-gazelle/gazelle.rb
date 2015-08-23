@@ -156,7 +156,7 @@ module SpiderGazelle
 
 
         def new_http1_parser
-            @h1_parser_obj ||= Http1::Http1Callbacks.new
+            @h1_parser_obj ||= Http1::Callbacks.new
 
             @parser_count += 1
             Http1.new(@return_http1, @h1_parser_obj, @thread, @logger)
