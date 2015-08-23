@@ -1,6 +1,6 @@
 # spider-gazelle
 
-[<img src="https://codeclimate.com/github/cotag/spider-gazelle.png" />](https://codeclimate.com/github/cotag/spider-gazelle)
+[<img src="https://codeclimate.com/github/cotag/spider-gazelle/badges/gpa.svg" />](https://codeclimate.com/github/cotag/spider-gazelle)
 [![Build Status](https://travis-ci.org/cotag/spider-gazelle.svg?branch=master)](https://travis-ci.org/cotag/spider-gazelle)
 
 
