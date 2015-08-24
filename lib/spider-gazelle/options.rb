@@ -160,6 +160,9 @@ module SpiderGazelle
 
                 # isolation and process mode don't mix
                 options[:isolate] = false if options[:mode] == :process
+
+                # Force no_ipc mode on Windows (sockets over pipes are not working in threaded mode)
+                options[:mode] = :no_ipc if ::FFI::Platform.windows? && options[:mode] == :thread
             end
 
             options
