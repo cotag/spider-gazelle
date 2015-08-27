@@ -477,14 +477,15 @@ module SpiderGazelle
                 end
             end
 
-            ERROR_400_RESPONSE = "HTTP/1.1 400 Bad Request\r\n\r\n".freeze
+            ERROR_400_RESPONSE = "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n".freeze
             def send_parsing_error
                 @logger.info "Parsing error!"
+                @socket.stop_read
                 @socket.write ERROR_400_RESPONSE
                 @socket.shutdown
             end
 
-            ERROR_500_RESPONSE = "HTTP/1.1 500 Internal Server Error\r\n\r\n".freeze
+            ERROR_500_RESPONSE = "HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\nContent-Length: 0\r\n\r\n".freeze
             def send_internal_error
                 @logger.info "Internal error"
                 @socket.stop_read
