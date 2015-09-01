@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    spider-gazelle (2.0.1)
+    spider-gazelle (2.0.2)
       http-2
       http-parser
       libuv (>= 2.0.5)
