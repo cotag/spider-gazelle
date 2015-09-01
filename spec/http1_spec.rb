@@ -231,4 +231,128 @@ describe ::SpiderGazelle::Gazelle::Http1 do
             "is a warm gun"
         ])
     end
+
+    it "should process a single async request and close the connection", http1: true do
+        app = lambda do |env|
+            expect(env['SERVER_PORT']).to eq(80)
+
+            Thread.new do
+                body = 'Hello, World!'
+                env['async.callback'].call [200, {'Content-Type' => 'text/plain', 'Content-Length' => body.length.to_s}, [body]]
+            end
+
+            throw :async
+        end
+        writes = []
+
+        @loop.run {
+            @http1.load(@socket, @port, app, @app_mode, @tls)
+            @http1.parse("GET / HTTP/1.1\r\nConnection: Close\r\n\r\n")
+
+            @socket.write_cb = proc { |data|
+                writes << data
+            }
+        }
+
+        expect(@shutdown_called).to be == 1
+        expect(@close_called).to be == 0
+        expect(writes).to eq([
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\nConnection: close\r\n\r\n",
+            "Hello, World!"
+        ])
+    end
+
+    it "should process pipelined async requests in order", http1: true do
+        current = 0
+        order = []
+        app = lambda do |env|
+            Thread.new do
+                env['async.callback'].call case env['REQUEST_PATH']
+                when '/1'
+                    order << 1
+                    current = 1
+                    body = 'Hello, World!'
+                    [200, {'Content-Type' => 'text/plain', 'Content-Length' => body.length.to_s}, [body]]
+                when '/2'
+                    order << 2
+                    current = 2
+                    body = ['Hello,', ' World!']
+                    [200, {'Content-Type' => 'text/plain'}, body]
+                when '/3'
+                    order << 3
+                    current = 3
+                    body = 'Happiness'
+                    [200, {'Content-Type' => 'text/plain', 'Content-Length' => body.length.to_s}, [body]]
+                when '/4'
+                    order << 4
+                    current = 4
+                    body = 'is a warm gun'
+                    [200, {'Content-Type' => 'text/plain', 'Content-Length' => body.length.to_s}, [body]]
+                end
+            end
+
+            throw :async
+        end
+
+        writes = []
+        @loop.run {
+            @http1.load(@socket, @port, app, @app_mode, @tls)
+            @http1.parse("GET /1 HTTP/1.1\r\n\r\nGET /2 HTTP/1.1\r\n\r\nGET /3 HTTP/1.1\r\n\r\n")
+            @http1.parse("GET /4 HTTP/1.1\r\nConnection: Close\r\n\r\n")
+
+            @socket.write_cb = proc { |data|
+                order << current
+                writes << data
+            }
+        }
+
+        expect(@shutdown_called).to be == 1
+        expect(@close_called).to be == 0
+        expect(order).to eq([1,1,1, 2,2,2,2,2, 3,3,3, 4,4,4])
+        expect(writes).to eq([
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\n",
+            "Hello, World!",
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n",
+            "6\r\nHello,\r\n", "7\r\n World!\r\n", "0\r\n\r\n",
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\n",
+            "Happiness",
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\nConnection: close\r\n\r\n",
+            "is a warm gun"
+        ])
+    end
+
+    it "should process a single async request and not suffer from race conditions", http1: true do
+        app = lambda do |env|
+            expect(env['SERVER_PORT']).to eq(80)
+
+            Thread.new do
+                body = 'Hello, World!'
+                env['async.callback'].call [200, {'Content-Type' => 'text/plain', 'Content-Length' => body.length.to_s}, [body]]
+            end
+
+            sleep 0.5
+
+            throw :async
+        end
+        writes = []
+
+        @loop.run {
+            @http1.load(@socket, @port, app, @app_mode, @tls)
+            @http1.parse("GET / HTTP/1.1\r\nConnection: Close\r\n\r\n")
+
+            @socket.write_cb = proc { |data|
+                writes << data
+            }
+        }
+
+        expect(@shutdown_called).to be == 1
+        expect(@close_called).to be == 0
+        expect(writes).to eq([
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\nConnection: close\r\n\r\n",
+            "Hello, World!"
+        ])
+
+        # Allow the worker thread to complete so we exit cleanly
+        sleep 1
+    end
 end

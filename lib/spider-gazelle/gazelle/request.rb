@@ -42,9 +42,8 @@ module SpiderGazelle
         SERVER_PORT = "SERVER_PORT".freeze
         REMOTE_ADDR = "REMOTE_ADDR".freeze
         RACK_URL_SCHEME = "rack.url_scheme".freeze
-        ASYNC = "async.callback".freeze
 
-        def initialize(thread, app, port, remote_ip, scheme, async_callback)
+        def initialize(thread, app, port, remote_ip, scheme)
             super(thread, thread.defer)
 
             @app = app
@@ -55,7 +54,6 @@ module SpiderGazelle
             @env[SERVER_PORT] = port
             @env[REMOTE_ADDR] = remote_ip
             @env[RACK_URL_SCHEME] = scheme
-            @env[ASYNC] = async_callback
         end
 
 
@@ -83,6 +81,8 @@ module SpiderGazelle
         
         HTTP_UPGRADE = 'HTTP_UPGRADE'.freeze
         USE_HTTP2 = 'h2c'.freeze
+
+
 
 
         def execute!

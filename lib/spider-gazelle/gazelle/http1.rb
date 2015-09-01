@@ -79,10 +79,9 @@ module SpiderGazelle
                 @logger = logger
 
                 @work = method(:work)
-                @work_complete = proc { |result|
-                    request = @processing
+                @work_complete = proc { |request, result|
                     if request.is_async && !request.hijacked
-                        if result.is_a? Fixnum
+                        if result.is_a?(Fixnum) && !request.defer.resolved?
                             # TODO:: setup timeout for async response
                         end
                     else
@@ -91,7 +90,6 @@ module SpiderGazelle
                     end
                 }
 
-                @async_callback = method(:async_callback)
                 @queue_response = method(:queue_response)
 
                 # The parser state for this instance
@@ -182,7 +180,7 @@ module SpiderGazelle
             # Parser Callbacks
             # ----------------
             def start_parsing
-                @parsing = Request.new @thread, @app, @port, @remote_ip, @scheme, @async_callback
+                @parsing = Request.new @thread, @app, @port, @remote_ip, @scheme
             end
 
             REQUEST_METHOD = 'REQUEST_METHOD'.freeze
@@ -190,6 +188,7 @@ module SpiderGazelle
                 @parsing.env[REQUEST_METHOD] = @state.http_method.to_s
             end
 
+            ASYNC = "async.callback".freeze
             def finished_parsing
                 request = @parsing
                 @parsing = nil
@@ -200,6 +199,12 @@ module SpiderGazelle
                     @socket.stop_read
                 end
 
+                # Process the async request in the same way as Mizuno
+                # See: http://polycrystal.org/2012/04/15/asynchronous_responses_in_rack.html
+                # Process a response that was marked as async.
+                request.env[ASYNC] = proc { |data|
+                    @thread.schedule { request.defer.resolve(data) }
+                }
                 request.upgrade = @state.upgrade?
                 @requests << request
                 process_next unless @processing
@@ -228,28 +233,13 @@ module SpiderGazelle
 
             EMPTY_RESPONSE = [''.freeze].freeze
             def work
+                request = @processing
                 begin
-                    @processing.execute!
+                    [request, request.execute!]
                 rescue StandardError => e
                     @logger.print_error e, 'framework error'
                     @processing.keep_alive = false
-                    [500, {}, EMPTY_RESPONSE]
-                end
-            end
-
-            # Process the async request in the same way as Mizuno
-            # See: http://polycrystal.org/2012/04/15/asynchronous_responses_in_rack.html
-            def async_callback(data)
-                @thread.schedule { callback(data) }
-            end
-
-            # Process a response that was marked as async. Save the data if the request hasn't responded yet
-            def callback(data)
-                request = @processing
-                if request && request.is_async
-                    request.defer.resolve(data)
-                else
-                    @logger.warn "Received async callback and there are no pending requests. Data was:\n#{data}"
+                    [request, [500, {}, EMPTY_RESPONSE]]
                 end
             end
 

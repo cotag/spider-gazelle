@@ -1,4 +1,6 @@
 #!/usr/bin/env ruby
 
+require 'spider-gazelle/version'
+puts "Launching spider-gazelle v#{::SpiderGazelle::VERSION}"
 require 'spider-gazelle'
 SpiderGazelle::LaunchControl.instance.exec(ARGV)
