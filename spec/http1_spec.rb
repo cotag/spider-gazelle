@@ -32,7 +32,21 @@ class MockLogger
 
     def method_missing(methId, *args)
         @logged << methId
-        p "methId: #{args}"
+        p "#{methId}: #{args}"
+    end
+
+    def print_error(e, msg)
+        @logged << msg << ': ' << e
+        msg << ":\n" unless msg.empty?
+        msg << "#{e.message}\n"
+        backtrace = e.backtrace if e.respond_to?(:backtrace)
+        if backtrace
+            msg << "#{backtrace.join("\n")}\n"
+        elsif trace.nil?
+            trace = caller
+        end
+        msg << "Caller backtrace:\n#{trace.join("\n")}\n" if trace
+        p msg
     end
 end
 
