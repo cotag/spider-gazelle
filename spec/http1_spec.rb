@@ -35,7 +35,7 @@ class MockLogger
         p "#{methId}: #{args}"
     end
 
-    def print_error(e, msg)
+    def print_error(e, msg = '', trace = nil)
         @logged << msg << ': ' << e
         msg << ":\n" unless msg.empty?
         msg << "#{e.message}\n"
@@ -46,7 +46,7 @@ class MockLogger
             trace = caller
         end
         msg << "Caller backtrace:\n#{trace.join("\n")}\n" if trace
-        p msg
+        puts msg
     end
 end
 
