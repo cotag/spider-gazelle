@@ -5,4 +5,7 @@ rvm:
   - ruby-head
   - rbx-2
   - jruby-head
+matrix:
+  allow_failures:
+    - rvm: rbx-2
 sudo: false
