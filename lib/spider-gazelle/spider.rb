@@ -299,6 +299,7 @@ module SpiderGazelle
 
             @options.each_index do |id|
                 options = @options[id]
+                @logger.verbose { "Loading rackup #{options}" }
                 iterator = @iterators[options[:mode]]
 
                 binding = @bindings[options[:port]] = Binding.new(iterator, id.to_s, options)

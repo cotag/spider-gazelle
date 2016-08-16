@@ -78,7 +78,6 @@ module SpiderGazelle
                 @thread = thread
                 @logger = logger
 
-                @work = method(:work)
                 @work_complete = proc { |request, result|
                     if request.is_async && !request.hijacked
                         if result.is_a?(Fixnum) && !request.defer.resolved?
@@ -162,6 +161,9 @@ module SpiderGazelle
                 # @mode = nil
                 # @scheme = nil
 
+                if @processing
+                    @processing.defer.reject(:socket_closed)
+                end
                 @processing = nil
                 @transmitting = nil
 
@@ -222,18 +224,18 @@ module SpiderGazelle
             end
 
             WORKER_ERROR = proc { |error|
-                @logger.print_error error, 'critical error'
+                Logger.instance.print_error error, 'critical error'
                 Reactor.instance.shutdown
             }
             def exec_on_thread_pool
-                promise = @thread.work @work
+                request = @processing
+                promise = @thread.work { work(request) }
                 promise.then @work_complete
                 promise.catch WORKER_ERROR
             end
 
             EMPTY_RESPONSE = [''.freeze].freeze
-            def work
-                request = @processing
+            def work(request)
                 begin
                     [request, request.execute!]
                 rescue StandardError => e
