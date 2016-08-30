@@ -71,7 +71,13 @@ module SpiderGazelle
         protected
 
         def socket_read(data, tcp)
-            @driver.parse data
+            begin
+                @driver.parse data
+            rescue => e
+                # Prevent hanging sockets
+                @socket.close
+                raise e
+            end
         end
 
         def socket_close
