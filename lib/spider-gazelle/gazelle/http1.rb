@@ -361,7 +361,7 @@ module SpiderGazelle
                         # Optimize the response
                         begin
                             if body.size < 2
-                                headers[CONTENT_LENGTH2] = body.size == 1 ? body[0].bytesize : ZERO
+                                headers[CONTENT_LENGTH2] = body.size == 1 ? body[0].bytesize.to_s : ZERO
                             end
                         rescue # just in case
                         end

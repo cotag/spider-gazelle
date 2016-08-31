@@ -86,7 +86,7 @@ module SpiderGazelle
 
 
         def execute!
-            @env[CONTENT_LENGTH] = @env.delete(HTTP_CONTENT_LENGTH) || @body.length
+            @env[CONTENT_LENGTH] = @env.delete(HTTP_CONTENT_LENGTH) || @body.bytesize.to_s
             @env[CONTENT_TYPE] = @env.delete(HTTP_CONTENT_TYPE) || DEFAULT_TYPE
             @env[REQUEST_URI] = @url.freeze
 

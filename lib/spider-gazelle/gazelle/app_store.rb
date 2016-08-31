@@ -15,10 +15,11 @@ module SpiderGazelle
                         return if @loaded[rackup]
 
                         app, opts = ::Rack::Builder.parse_file(rackup)
+                        app = Rack::Lint.new(app) if options[:verbose]
                         tls = configure_tls(options)
                         port = tls ? 443 : 80
 
-                        val = [app, options[:app_mode], port, tls]
+                        val = [app, options[:app_mode], port.to_s, tls]
                         @apps << val
                         @loaded[rackup] = val
                     }
