@@ -9,7 +9,7 @@ module SpiderGazelle
 
 
         def initialize
-            @thread = ::Libuv::Loop.default
+            @thread = ::Libuv::Reactor.default
             @logger = Logger.instance
             @running = false
             @shutdown = method(:shutdown)

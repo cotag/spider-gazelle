@@ -141,7 +141,7 @@ module SpiderGazelle
         end
 
         def set_protocol(socket, version)
-            app, app_mode, port, tls = socket.storage
+            app, port, tls = socket.storage
 
             parser = if version == :h2
                 @http2_cache.pop || new_http2_parser
@@ -149,7 +149,7 @@ module SpiderGazelle
                 @http1_cache.pop || new_http1_parser
             end
 
-            parser.load(socket, port, app, app_mode, tls)
+            parser.load(socket, port, app, tls)
             socket.progress @on_progress
             socket.storage = parser
         end

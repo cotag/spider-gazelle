@@ -243,7 +243,7 @@ module SpiderGazelle
 
                     @threads = []
                     count.times do
-                        thread = ::Libuv::Loop.new
+                        thread = ::Libuv::Reactor.new
                         @threads << thread
 
                         Thread.new { load_gazelle_thread(reactor, thread, mode, options) }

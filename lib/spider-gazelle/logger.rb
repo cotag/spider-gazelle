@@ -19,7 +19,7 @@ module SpiderGazelle
 
 
         def initialize
-            @thread = ::Libuv::Loop.default
+            @thread = ::Libuv::Reactor.default
             @level = DEFAULT_LEVEL
             @write = method(:server_write)
         end

@@ -55,12 +55,11 @@ describe ::SpiderGazelle::Gazelle::Http1 do
         @shutdown_called = 0
         @close_called = 0
 
-        @loop = ::Libuv::Loop.default
-        @timeout = @loop.timer do
+        @loop = ::Libuv::Reactor.default
+        @timeout = @loop.timer {
             @loop.stop
             @general_failure << "test timed out"
-        end
-        @timeout.start(1000)
+        }.start(1000)
 
 
         @return ||= proc {|http1|
@@ -80,7 +79,6 @@ describe ::SpiderGazelle::Gazelle::Http1 do
             @loop.stop
         }
 
-        @app_mode = :thread_pool
         @port = 80
         @tls = false
     end
@@ -94,12 +92,12 @@ describe ::SpiderGazelle::Gazelle::Http1 do
             expect(env['SERVER_PORT']).to eq(80)
 
             body = 'Hello, World!'
-            [200, {'Content-Type' => 'text/plain', 'Content-Length' => body.length.to_s}, [body]]
+            [200, {'Content-Type' => 'text/plain', 'Content-Length' => body.bytesize.to_s}, [body]]
         end
         writes = []
 
         @loop.run {
-            @http1.load(@socket, @port, app, @app_mode, @tls)
+            @http1.load(@socket, @port, app, @tls)
             @http1.parse("GET / HTTP/1.1\r\nConnection: Close\r\n\r\n")
 
             @socket.write_cb = proc { |data|
@@ -107,12 +105,12 @@ describe ::SpiderGazelle::Gazelle::Http1 do
             }
         }
 
-        expect(@shutdown_called).to be == 1
-        expect(@close_called).to be == 0
         expect(writes).to eq([
             "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\nConnection: close\r\n\r\n",
             "Hello, World!"
         ])
+        expect(@shutdown_called).to be == 1
+        expect(@close_called).to be == 0
     end
 
     it "should fill out the environment properly", http1: true do
@@ -130,7 +128,7 @@ describe ::SpiderGazelle::Gazelle::Http1 do
         end
 
         @loop.run {
-            @http1.load(@socket, @port, app, @app_mode, @tls)
+            @http1.load(@socket, @port, app, @tls)
             @http1.parse("GET /?test=ing HTTP/1.1\r\nHost: spider.gazelle.net:3000\r\nConnection: Close\r\n\r\n")
         }
 
@@ -146,7 +144,7 @@ describe ::SpiderGazelle::Gazelle::Http1 do
         writes = []
 
         @loop.run {
-            @http1.load(@socket, @port, app, @app_mode, @tls)
+            @http1.load(@socket, @port, app, @tls)
             @http1.parse("GET / HTTP/1.1\r\nConnection: Close\r\n\r\n")
 
             @socket.write_cb = proc { |data|
@@ -170,7 +168,7 @@ describe ::SpiderGazelle::Gazelle::Http1 do
         writes = []
 
         @loop.run {
-            @http1.load(@socket, @port, app, @app_mode, @tls)
+            @http1.load(@socket, @port, app, @tls)
             @http1.parse("GET / HTTP/1.1\r\n\r\n")
 
             @socket.write_cb = proc { |data|
@@ -221,7 +219,7 @@ describe ::SpiderGazelle::Gazelle::Http1 do
 
         writes = []
         @loop.run {
-            @http1.load(@socket, @port, app, @app_mode, @tls)
+            @http1.load(@socket, @port, app, @tls)
             @http1.parse("GET /1 HTTP/1.1\r\n\r\nGET /2 HTTP/1.1\r\n\r\nGET /3 HTTP/1.1\r\n\r\n")
             @http1.parse("GET /4 HTTP/1.1\r\nConnection: Close\r\n\r\n")
 
@@ -260,7 +258,7 @@ describe ::SpiderGazelle::Gazelle::Http1 do
         writes = []
 
         @loop.run {
-            @http1.load(@socket, @port, app, @app_mode, @tls)
+            @http1.load(@socket, @port, app, @tls)
             @http1.parse("GET / HTTP/1.1\r\nConnection: Close\r\n\r\n")
 
             @socket.write_cb = proc { |data|
@@ -310,7 +308,7 @@ describe ::SpiderGazelle::Gazelle::Http1 do
 
         writes = []
         @loop.run {
-            @http1.load(@socket, @port, app, @app_mode, @tls)
+            @http1.load(@socket, @port, app, @tls)
             @http1.parse("GET /1 HTTP/1.1\r\n\r\nGET /2 HTTP/1.1\r\n\r\nGET /3 HTTP/1.1\r\n\r\n")
             @http1.parse("GET /4 HTTP/1.1\r\nConnection: Close\r\n\r\n")
 
@@ -351,7 +349,7 @@ describe ::SpiderGazelle::Gazelle::Http1 do
         writes = []
 
         @loop.run {
-            @http1.load(@socket, @port, app, @app_mode, @tls)
+            @http1.load(@socket, @port, app, @tls)
             @http1.parse("GET / HTTP/1.1\r\nConnection: Close\r\n\r\n")
 
             @socket.write_cb = proc { |data|

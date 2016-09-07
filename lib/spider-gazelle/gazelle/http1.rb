@@ -78,17 +78,6 @@ module SpiderGazelle
                 @thread = thread
                 @logger = logger
 
-                @work_complete = proc { |request, result|
-                    if request.is_async && !request.hijacked
-                        if result.is_a?(Fixnum) && !request.defer.resolved?
-                            # TODO:: setup timeout for async response
-                        end
-                    else
-                        # Complete the current request
-                        request.defer.resolve(result)
-                    end
-                }
-
                 @queue_response = method(:queue_response)
 
                 # The parser state for this instance
@@ -111,25 +100,10 @@ module SpiderGazelle
             HTTP = 'http'.freeze
             HTTPS = 'https'.freeze
 
-            def load(socket, port, app, app_mode, tls)
+            def load(socket, port, app, tls)
                 @socket = socket
                 @port = port
                 @app = app
-                @mode = app_mode
-
-                case @mode
-                when :thread_pool
-                    @exec = method :exec_on_thread_pool
-                when :fiber_pool
-                    # TODO:: Implement these modes
-                    @exec = method :critical_error
-                when :libuv
-                    @exec = method :critical_error
-                when :eventmachine
-                    @exec = method :critical_error
-                when :celluloid
-                    @exec = method :critical_error
-                end
 
                 @remote_ip = socket.peername[0]
                 @scheme = tls ? HTTPS : HTTP
@@ -182,7 +156,7 @@ module SpiderGazelle
             # Parser Callbacks
             # ----------------
             def start_parsing
-                @parsing = Request.new @thread, @app, @port, @remote_ip, @scheme
+                @parsing = Request.new @thread, @app, @port, @remote_ip, @scheme, @socket
             end
 
             REQUEST_METHOD = 'REQUEST_METHOD'.freeze
@@ -205,7 +179,7 @@ module SpiderGazelle
                 # See: http://polycrystal.org/2012/04/15/asynchronous_responses_in_rack.html
                 # Process a response that was marked as async.
                 request.env[ASYNC] = proc { |data|
-                    @thread.schedule { request.defer.resolve(data) }
+                    @thread.schedule { request.defer.resolve([request, data]) }
                 }
                 request.upgrade = @state.upgrade?
                 @requests << request
@@ -218,30 +192,33 @@ module SpiderGazelle
             def process_next
                 @processing = @requests.shift
                 if @processing
-                    @exec.call
-                    @processing.then @queue_response
+                    request = @processing
+                    begin
+                        result = work(request)
+                        if request.is_async && !request.hijacked
+                            if result.is_a?(Fixnum) && !request.defer.resolved?
+                                # TODO:: setup timeout for async response
+                            end
+                        else
+                            # Complete the current request
+                            request.defer.resolve([request, result])
+                        end
+                        request.then @queue_response
+                    rescue Exception => error
+                        Logger.instance.print_error error, 'critical error'
+                        Reactor.instance.shutdown
+                    end
                 end
-            end
-
-            WORKER_ERROR = proc { |error|
-                Logger.instance.print_error error, 'critical error'
-                Reactor.instance.shutdown
-            }
-            def exec_on_thread_pool
-                request = @processing
-                promise = @thread.work { work(request) }
-                promise.then @work_complete
-                promise.catch WORKER_ERROR
             end
 
             EMPTY_RESPONSE = [''.freeze].freeze
             def work(request)
                 begin
-                    [request, request.execute!]
+                    request.execute!
                 rescue StandardError => e
                     @logger.print_error e, 'framework error'
                     @processing.keep_alive = false
-                    [request, [500, {}, EMPTY_RESPONSE]]
+                    [500, {}, EMPTY_RESPONSE]
                 end
             end
 
@@ -249,8 +226,8 @@ module SpiderGazelle
             # ----------------
             # Response Sending
             # ----------------
-            def queue_response(result)
-                @responses << [@processing, result]
+            def queue_response(response)
+                @responses << response
                 send_next_response unless @transmitting
 
                 # Processing will be set to nil if the array is empty

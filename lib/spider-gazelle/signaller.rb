@@ -11,7 +11,7 @@ module SpiderGazelle
 
 
         def initialize
-            @thread = ::Libuv::Loop.default
+            @thread = ::Libuv::Reactor.default
             @logger = Logger.instance
 
             # This is used to check if an instance of spider-gazelle is already running

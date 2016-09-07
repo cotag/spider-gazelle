@@ -13,7 +13,6 @@ module SpiderGazelle
             backlog: 5000,
             rackup: "#{Dir.pwd}/config.ru",
             mode: :thread,
-            app_mode: :thread_pool,
             isolate: true
         }.freeze
 
@@ -59,7 +58,7 @@ module SpiderGazelle
                     options[:rackup] = arg
                 end
 
-                opts.on "-m", "--mode MODE", MODES, "Either process, thread or no_ipc (default: process)" do |arg|
+                opts.on "-m", "--mode MODE", MODES, "Either process, thread or no_ipc (default: thread)" do |arg|
                     options[:mode] = arg
                 end
 

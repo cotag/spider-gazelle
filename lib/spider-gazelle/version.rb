@@ -1,5 +1,5 @@
 
 module SpiderGazelle
-    VERSION = '2.0.5'.freeze
+    VERSION = '3.0.0'.freeze
     EXEC_NAME = 'sg'.freeze
 end

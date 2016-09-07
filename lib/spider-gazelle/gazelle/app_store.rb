@@ -19,7 +19,7 @@ module SpiderGazelle
                         tls = configure_tls(options)
                         port = tls ? 443 : 80
 
-                        val = [app, options[:app_mode], port.to_s, tls]
+                        val = [app, port.to_s, tls]
                         @apps << val
                         @loaded[rackup] = val
                     }
@@ -41,7 +41,7 @@ module SpiderGazelle
                     tls = configure_tls(options)
                     port = tls ? 443 : 80
 
-                    val = [app, options[:app_mode], port, tls]
+                    val = [app, port.to_s, tls]
                     @apps << val
                     @loaded[obj_id] = val
 

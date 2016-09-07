@@ -43,9 +43,10 @@ module SpiderGazelle
         REMOTE_ADDR = "REMOTE_ADDR".freeze
         RACK_URL_SCHEME = "rack.url_scheme".freeze
 
-        def initialize(thread, app, port, remote_ip, scheme)
+        def initialize(thread, app, port, remote_ip, scheme, socket)
             super(thread, thread.defer)
 
+            @socket = socket
             @app = app
             @body = ''
             @header = ''
@@ -125,7 +126,7 @@ module SpiderGazelle
                     # TODO:: implement the upgrade process here
                 else
                     @env[HIJACK_P] = true
-                    @env[HIJACK] = method :hijack
+                    @env[HIJACK] = proc { @env[HIJACK_IO] = @socket }
                 end
             end
 
@@ -142,14 +143,6 @@ module SpiderGazelle
                 end
             end
             resp
-        end
-
-        protected
-
-        def hijack
-            @hijacked = @loop.defer
-            @env.delete HIJACK # don't want to hold a reference to this request object
-            @env[HIJACK_IO] = @hijacked.promise
         end
     end
 end
