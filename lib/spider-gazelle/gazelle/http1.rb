@@ -78,7 +78,8 @@ module SpiderGazelle
                 @thread = thread
                 @logger = logger
 
-                @queue_response = method(:queue_response)
+                @queue_response = method :queue_response
+                @write_chunk = method :write_chunk
 
                 # The parser state for this instance
                 @state = ::HttpParser::Parser.new_instance do |inst|
@@ -374,7 +375,6 @@ module SpiderGazelle
                     write_headers keep_alive, status, headers
 
                     # Stream the response
-                    @write_chunk ||= method :write_chunk
                     body.each &@write_chunk
 
                     @socket.write CLOSE_CHUNKED
