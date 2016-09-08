@@ -266,10 +266,9 @@ module SpiderGazelle
         end
 
         def load_gazelle_thread(reactor, thread, mode, options)
-            thread.run do |logger|
-                # Log any unhandled errors
-                logger.progress reactor.method(:log)
-
+            # Log any unhandled errors
+            thread.notifier reactor.method(:log)
+            thread.run do |thread|
                 # Start the gazelle
                 ::SpiderGazelle::Gazelle.new(thread, :thread).run!(options)
             end
