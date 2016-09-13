@@ -1,22 +1,24 @@
+# frozen_string_literal: true
+
 require 'stringio'
 require 'rack'            # Ruby webserver abstraction
 
 module SpiderGazelle
     class Request < ::Libuv::Q::DeferredPromise
-        RACK_VERSION = 'rack.version'.freeze
-        RACK_ERRORS = 'rack.errors'.freeze
-        RACK_MULTITHREAD = "rack.multithread".freeze
-        RACK_MULTIPROCESS = "rack.multiprocess".freeze
-        RACK_RUN_ONCE = "rack.run_once".freeze
-        SCRIPT_NAME = "SCRIPT_NAME".freeze
-        EMPTY = ''.freeze
-        SERVER_PROTOCOL = "SERVER_PROTOCOL".freeze
-        HTTP_11 = "HTTP/1.1".freeze
-        SERVER_SOFTWARE = "SERVER_SOFTWARE".freeze
-        GATEWAY_INTERFACE = "GATEWAY_INTERFACE".freeze
-        CGI_VER = "CGI/1.2".freeze
-        SERVER = "SpiderGazelle".freeze
-        LOCALHOST = 'localhost'.freeze
+        RACK_VERSION = 'rack.version'
+        RACK_ERRORS = 'rack.errors'
+        RACK_MULTITHREAD = "rack.multithread"
+        RACK_MULTIPROCESS = "rack.multiprocess"
+        RACK_RUN_ONCE = "rack.run_once"
+        SCRIPT_NAME = "SCRIPT_NAME"
+        EMPTY = ''
+        SERVER_PROTOCOL = "SERVER_PROTOCOL"
+        HTTP_11 = "HTTP/1.1"
+        SERVER_SOFTWARE = "SERVER_SOFTWARE"
+        GATEWAY_INTERFACE = "GATEWAY_INTERFACE"
+        CGI_VER = "CGI/1.2"
+        SERVER = "SpiderGazelle"
+        LOCALHOST = 'localhost'
 
 
         # TODO:: Add HTTP headers to the env and capitalise them and prefix them with HTTP_
@@ -28,7 +30,7 @@ module SpiderGazelle
             RACK_MULTIPROCESS => true,        # will the app be simultaneously be invoked in a separate process?
             RACK_RUN_ONCE => false,            # this isn't CGI so will always be false
 
-            SCRIPT_NAME => ENV['SCRIPT_NAME'.freeze] || EMPTY,   #  The virtual path of the app base (empty if root)
+            SCRIPT_NAME => ENV['SCRIPT_NAME'] || EMPTY,   #  The virtual path of the app base (empty if root)
             SERVER_PROTOCOL => HTTP_11,
 
             GATEWAY_INTERFACE => CGI_VER,
@@ -39,18 +41,18 @@ module SpiderGazelle
         attr_reader :hijacked, :defer, :is_async
 
 
-        SERVER_PORT = "SERVER_PORT".freeze
-        REMOTE_ADDR = "REMOTE_ADDR".freeze
-        RACK_URL_SCHEME = "rack.url_scheme".freeze
+        SERVER_PORT = "SERVER_PORT"
+        REMOTE_ADDR = "REMOTE_ADDR"
+        RACK_URL_SCHEME = "rack.url_scheme"
 
         def initialize(thread, app, port, remote_ip, scheme, socket)
             super(thread, thread.defer)
 
             @socket = socket
             @app = app
-            @body = ''
-            @header = ''
-            @url = ''
+            @body = String.new
+            @header = String.new
+            @url = String.new
             @env = PROTO_ENV.dup
             @env[SERVER_PORT] = port
             @env[REMOTE_ADDR] = remote_ip
@@ -58,30 +60,30 @@ module SpiderGazelle
         end
 
 
-        CONTENT_LENGTH = "CONTENT_LENGTH".freeze
-        HTTP_CONTENT_LENGTH = "HTTP_CONTENT_LENGTH".freeze
-        CONTENT_TYPE = "CONTENT_TYPE".freeze
-        HTTP_CONTENT_TYPE = "HTTP_CONTENT_TYPE".freeze
-        DEFAULT_TYPE = "text/plain".freeze
-        REQUEST_URI= "REQUEST_URI".freeze
-        ASCII_8BIT = "ASCII-8BIT".freeze
-        RACK_INPUT = "rack.input".freeze
-        PATH_INFO = "PATH_INFO".freeze
-        REQUEST_PATH = "REQUEST_PATH".freeze
-        QUERY_STRING = "QUERY_STRING".freeze
-        HTTP_HOST = "HTTP_HOST".freeze
-        COLON = ":".freeze
-        SERVER_NAME = "SERVER_NAME".freeze
+        CONTENT_LENGTH = "CONTENT_LENGTH"
+        HTTP_CONTENT_LENGTH = "HTTP_CONTENT_LENGTH"
+        CONTENT_TYPE = "CONTENT_TYPE"
+        HTTP_CONTENT_TYPE = "HTTP_CONTENT_TYPE"
+        DEFAULT_TYPE = "text/plain"
+        REQUEST_URI= "REQUEST_URI"
+        ASCII_8BIT = "ASCII-8BIT"
+        RACK_INPUT = "rack.input"
+        PATH_INFO = "PATH_INFO"
+        REQUEST_PATH = "REQUEST_PATH"
+        QUERY_STRING = "QUERY_STRING"
+        HTTP_HOST = "HTTP_HOST"
+        COLON = ":"
+        SERVER_NAME = "SERVER_NAME"
         # Hijacking IO is supported
-        HIJACK_P = "rack.hijack?".freeze
+        HIJACK_P = "rack.hijack?"
         # Callback for indicating that this socket will be hijacked
-        HIJACK = "rack.hijack".freeze
+        HIJACK = "rack.hijack"
         # The object for performing IO on after hijack is called
-        HIJACK_IO = "rack.hijack_io".freeze
-        QUESTION_MARK = "?".freeze
+        HIJACK_IO = "rack.hijack_io"
+        QUESTION_MARK = "?"
         
-        HTTP_UPGRADE = 'HTTP_UPGRADE'.freeze
-        USE_HTTP2 = 'h2c'.freeze
+        HTTP_UPGRADE = 'HTTP_UPGRADE'
+        USE_HTTP2 = 'h2c'
 
 
 
@@ -92,7 +94,7 @@ module SpiderGazelle
             @env[REQUEST_URI] = @url.freeze
 
             # For Rack::Lint on 1.9, ensure that the encoding is always for spec
-            @body.force_encoding(ASCII_8BIT) if @body.respond_to?(:force_encoding)
+            @body.force_encoding(ASCII_8BIT)
             @env[RACK_INPUT] = StringIO.new @body
 
             # Break the request into its components
@@ -112,7 +114,7 @@ module SpiderGazelle
             if host = @env[HTTP_HOST]
                 if colon = host.index(COLON)
                     @env[SERVER_NAME] = host[0, colon]
-                    @env[SERVER_PORT] = host[colon + 1, host.bytesize].to_i
+                    @env[SERVER_PORT] = host[colon + 1, host.bytesize]
                 else
                     @env[SERVER_NAME] = host
                 end
@@ -120,18 +122,16 @@ module SpiderGazelle
                 @env[SERVER_NAME] = LOCALHOST
             end
 
-            # Provide hijack options if this is an upgrade request
-            if @upgrade == true
-                if @env[HTTP_UPGRADE] == USE_HTTP2
-                    # TODO:: implement the upgrade process here
-                else
-                    @env[HIJACK_P] = true
-                    @env[HIJACK] = proc { @env[HIJACK_IO] = @socket }
-                end
+            if @upgrade == true && @env[HTTP_UPGRADE] == USE_HTTP2
+                # TODO:: implement the upgrade process here
             end
 
+            # Provide hijack options
+            @env[HIJACK_P] = true
+            @env[HIJACK] = proc { @env[HIJACK_IO] = @socket }
+
             # Execute the request
-            # NOTE:: Catch was overloaded by Promise so this does the 
+            # NOTE:: Catch was overloaded by Promise so this does the trick now
             resp = ruby_catch(:async) { @app.call @env }
             if resp.nil? || resp[0] == -1
                 @is_async = true

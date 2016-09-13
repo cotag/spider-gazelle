@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'thread'
 require 'singleton'
 
@@ -10,22 +12,22 @@ require 'spider-gazelle/signaller'
 
 
 module SpiderGazelle
-    INTERNAL_PIPE_BACKLOG = 128
+    INTERNAL_PIPE_BACKLOG = 4096
 
     # Signaller is used to communicate:
     # * command line requests
     # * Startup and shutdown requests 
     # * Live updates (bindings passed by this pipe)
-    SIGNAL_SERVER = '/tmp/sg-signaller.pipe'.freeze
+    SIGNAL_SERVER = '/tmp/sg-signaller.pipe'
 
     # Spider server is used to
     # * Track gazelles
     # * Signal shutdown as required
     # * Pass sockets
-    SPIDER_SERVER = '/tmp/sg-spider.pipe.'.freeze
+    SPIDER_SERVER = '/tmp/sg-spider.pipe.'
+
 
     MODES = [:process, :thread, :no_ipc].freeze
-    APP_MODE = [:thread_pool, :fiber_pool, :libuv, :eventmachine, :celluloid]
 
 
     class LaunchControl
@@ -144,24 +146,24 @@ module SpiderGazelle
 
                 if running
                     if master[:spider]
-                        logger.verbose "Starting Spider".freeze
+                        logger.verbose "Starting Spider"
                         start_spider(signaller, logger, options)
                     elsif master[:gazelle]
-                        logger.verbose "Starting Gazelle".freeze
+                        logger.verbose "Starting Gazelle"
                         start_gazelle(signaller, logger, options)
                     else
-                        logger.verbose "Sending signal to SG Master".freeze
+                        logger.verbose "Sending signal to SG Master"
                         signal_master(reactor, signaller, logger, options)
                     end
 
                 elsif master[:debug]
-                    logger.verbose "SG is now running in debug mode".freeze
+                    logger.verbose "SG is now running in debug mode"
                 else
-                    logger.verbose "SG was not running, launching Spider".freeze
+                    logger.verbose "SG was not running, launching Spider"
                     launch_spider(@args)
                 end
             rescue => e
-                logger.verbose "Error performing requested operation".freeze
+                logger.verbose "Error performing requested operation"
                 logger.print_error(e)
                 shutdown
             end

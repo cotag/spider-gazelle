@@ -56,6 +56,13 @@ describe ::SpiderGazelle::Gazelle::Http1 do
         @close_called = 0
 
         @loop = ::Libuv::Reactor.default
+        @loop.notifier do |error, context|
+            begin
+                p "Log called: #{context}\n#{error.message}\n#{error.backtrace.join("\n")}\n"
+            rescue Exception
+                p 'error in logger'
+            end
+        end
         @timeout = @loop.timer {
             @loop.stop
             @general_failure << "test timed out"
@@ -119,7 +126,7 @@ describe ::SpiderGazelle::Gazelle::Http1 do
             expect(env['REQUEST_PATH']).to eq('/')
             expect(env['QUERY_STRING']).to eq('test=ing')
             expect(env['SERVER_NAME']).to eq('spider.gazelle.net')
-            expect(env['SERVER_PORT']).to eq(3000)
+            expect(env['SERVER_PORT']).to eq('3000')
             expect(env['REMOTE_ADDR']).to eq('127.0.0.1')
             expect(env['rack.url_scheme']).to eq('http')
 

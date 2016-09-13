@@ -18,7 +18,7 @@ Gem::Specification.new do |s|
       Look out! Here comes the Spidergazelle!
     EOF
 
-    s.add_dependency 'http-parser', '~> 1.0'    # Ruby FFI bindings for https://github.com/joyent/http-parser
+    s.add_dependency 'http-parser', '~> 1.1'    # Ruby FFI bindings for https://github.com/joyent/http-parser
     s.add_dependency 'libuv',  '~> 3.0' # Ruby FFI bindings for https://github.com/libuv/libuv
     s.add_dependency 'uv-rays','~> 2.0' # Provides buffering tools
     s.add_dependency 'rack',   '~> 2.0' # Ruby web server interface
