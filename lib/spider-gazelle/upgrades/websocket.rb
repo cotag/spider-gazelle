@@ -5,7 +5,7 @@ require 'forwardable'
 
 module SpiderGazelle
     class Websocket < ::Libuv::Q::DeferredPromise
-        attr_reader :env, :url, :reactor
+        attr_reader :env, :url, :reactor, :socket
 
 
         RACK_URL_SCHEME = 'rack.url_scheme'
@@ -16,7 +16,7 @@ module SpiderGazelle
 
         extend Forwardable
         def_delegators :@driver, :start, :ping, :protocol, :ready_state, :set_header, :state, :close
-        def_delegators :@socket, :write
+        def_delegators :@socket, :write, :peername
 
         def initialize(tcp, env)
             @socket, @env = tcp, env
