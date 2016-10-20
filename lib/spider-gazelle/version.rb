@@ -1,5 +1,6 @@
+# frozen_string_literal: true
 
 module SpiderGazelle
-    VERSION = '2.0.5'.freeze
-    EXEC_NAME = 'sg'.freeze
+    VERSION = '3.0.0'
+    EXEC_NAME = 'sg'
 end

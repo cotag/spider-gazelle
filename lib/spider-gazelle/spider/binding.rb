@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'thread'
 
 module SpiderGazelle
@@ -65,7 +67,7 @@ module SpiderGazelle
                 end
             }
             def delegate(client, retries = 0)
-                promise = @select_gazelle.next.write2(client, @indicator)
+                promise = @select_gazelle.next.write2(client, @indicator, wait: :promise)
                 promise.then do
                     client.close
                 end

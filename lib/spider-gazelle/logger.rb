@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'libuv'
 
 module SpiderGazelle
@@ -19,7 +21,7 @@ module SpiderGazelle
 
 
         def initialize
-            @thread = ::Libuv::Loop.default
+            @thread = ::Libuv::Reactor.default
             @level = DEFAULT_LEVEL
             @write = method(:server_write)
         end
@@ -85,17 +87,12 @@ module SpiderGazelle
             end
         end
 
-        def print_error(e, msg = '', trace = nil)
-            msg << ":\n" unless msg.empty?
-            msg << "#{e.message}\n"
-            backtrace = e.backtrace if e.respond_to?(:backtrace)
-            if backtrace
-                msg << "#{backtrace.join("\n")}\n"
-            elsif trace.nil?
-                trace = caller
-            end
-            msg << "Caller backtrace:\n#{trace.join("\n")}\n" if trace
-            error(msg)
+        def print_error(e, msg = nil, trace = nil)
+            message = String.new(msg || e.message)
+            message << "\n#{e.message}" if msg
+            message << "\n#{e.backtrace.join("\n")}" if e.respond_to?(:backtrace) && e.backtrace
+            message << "\nCaller backtrace:\n#{trace.join("\n")}" if trace
+            error(message)
         end
 
         # NOTE:: should only be called on reactor thread

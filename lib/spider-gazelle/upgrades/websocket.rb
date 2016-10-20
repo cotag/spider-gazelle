@@ -1,26 +1,28 @@
+# frozen_string_literal: true
+
 require 'websocket/driver'
 require 'forwardable'
 
 module SpiderGazelle
     class Websocket < ::Libuv::Q::DeferredPromise
-        attr_reader :env, :url, :loop
+        attr_reader :env, :url, :reactor, :socket
 
 
-        RACK_URL_SCHEME = "rack.url_scheme".freeze
-        HTTP_HOST = "HTTP_HOST".freeze
-        REQUEST_URI= "REQUEST_URI".freeze
-        HTTPS = 'https'.freeze
+        RACK_URL_SCHEME = 'rack.url_scheme'
+        HTTP_HOST = 'HTTP_HOST'
+        REQUEST_URI= 'REQUEST_URI'
+        HTTPS = 'https'
 
 
         extend Forwardable
         def_delegators :@driver, :start, :ping, :protocol, :ready_state, :set_header, :state, :close
-        def_delegators :@socket, :write
+        def_delegators :@socket, :write, :peername
 
         def initialize(tcp, env)
             @socket, @env = tcp, env
 
             # Initialise the promise
-            super tcp.loop, tcp.loop.defer
+            super tcp.reactor, tcp.reactor.defer
 
             scheme = env[RACK_URL_SCHEME] == HTTPS ? 'wss://' : 'ws://'
             @url = scheme + env[HTTP_HOST] + env[REQUEST_URI]
@@ -42,14 +44,14 @@ module SpiderGazelle
         #
         # @param string [String] a string of data to be sent to the far end
         def text(string)
-            @loop.schedule { @driver.text(string.to_s) }
+            @reactor.schedule { @driver.text(string.to_s) }
         end
 
         # Write some binary data to the websocket connection
         #
         # @param array [Array] an array of bytes to be sent to the far end
         def binary(array)
-            @loop.schedule { @driver.binary(array.to_a) }
+            @reactor.schedule { @driver.binary(array.to_a) }
         end
 
         # Used to define a callback when data is received from the client

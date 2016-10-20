@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spider-gazelle/spider/binding'        # Holds a reference to a bound port
 require 'securerandom'
 
@@ -67,13 +69,13 @@ module SpiderGazelle
             load_promise.then do
                 # Check a shutdown request didn't occur as we were loading
                 if @running
-                    @logger.verbose "All gazelles running".freeze
+                    @logger.verbose "All gazelles running"
 
                     # This happends on the master thread so we don't need to check
                     # for the shutdown events here
                     bind_application_ports
                 else
-                    @logger.warn "A shutdown event occured while loading".freeze
+                    @logger.warn "A shutdown event occured while loading"
                     perform_shutdown
                 end
             end
@@ -125,7 +127,7 @@ module SpiderGazelle
             rescue
             end
 
-            shutdown = false
+            @shutdown = false
             check = method(:check_credentials)
             @pipe.bind(@pipe_file) do |client|
                 @logger.verbose { "Gazelle <0x#{client.object_id.to_s(16)}> connection made" }
@@ -145,8 +147,8 @@ module SpiderGazelle
                     rescue
                     ensure
                         @gazelles.delete client
-                        if !shutdown
-                            shutdown = true
+                        if !@shutdown
+                            @shutdown = true
                             @signaller.general_failure
                         end
                     end
@@ -243,7 +245,7 @@ module SpiderGazelle
 
                     @threads = []
                     count.times do
-                        thread = ::Libuv::Loop.new
+                        thread = ::Libuv::Reactor.new
                         @threads << thread
 
                         Thread.new { load_gazelle_thread(reactor, thread, mode, options) }
@@ -266,10 +268,18 @@ module SpiderGazelle
         end
 
         def load_gazelle_thread(reactor, thread, mode, options)
-            thread.run do |logger|
-                # Log any unhandled errors
-                logger.progress reactor.method(:log)
-
+            # Log any unhandled errors
+            thread.notifier reactor.method(:log)
+            # Give current requests 5 seconds to complete
+            thread.on_program_interrupt do
+                timer = thread.timer {
+                    puts "Forcing gazelle exit"
+                    thread.stop
+                }
+                timer.unref
+                timer.start(5000)
+            end
+            thread.run do |thread|
                 # Start the gazelle
                 ::SpiderGazelle::Gazelle.new(thread, :thread).run!(options)
             end
@@ -283,9 +293,9 @@ module SpiderGazelle
             if @running
                 @thread.schedule do
                     if result
-                        @logger.verbose "Gazelle process exited with exit status 0".freeze
+                        @logger.verbose "Gazelle process exited with exit status 0"
                     else
-                        @logger.error "Gazelle process exited unexpectedly".freeze
+                        @logger.error "Gazelle process exited unexpectedly"
                     end
                      
                     @signaller.general_failure
@@ -330,6 +340,7 @@ module SpiderGazelle
 
         def shutdown_gazelles
             @bound = false
+            @shutdown = true
             promises = []
 
             @iterator_source.each do |mode, gazelles|

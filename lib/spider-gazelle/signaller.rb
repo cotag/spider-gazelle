@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'libuv'
 
 
@@ -11,7 +13,7 @@ module SpiderGazelle
 
 
         def initialize
-            @thread = ::Libuv::Loop.default
+            @thread = ::Libuv::Reactor.default
             @logger = Logger.instance
 
             # This is used to check if an instance of spider-gazelle is already running
@@ -69,7 +71,7 @@ module SpiderGazelle
         end
 
         def general_failure
-            @pipe.write "\x02Signaller general_failure\x03".freeze
+            @pipe.write "\x02Signaller general_failure\x03"
         rescue
         ensure
             Reactor.instance.shutdown
@@ -91,7 +93,7 @@ module SpiderGazelle
                 @is_client = true
                 @is_connected = true
 
-                @logger.verbose "Client connected to SG Master".freeze
+                @logger.verbose "Client connected to SG Master"
                 
                 require 'uv-rays/buffered_tokenizer'
                 @parser = ::UV::BufferedTokenizer.new({
@@ -172,6 +174,8 @@ module SpiderGazelle
             #@logger.error "Master pipe went missing: #{reason}"
             # Server most likely exited
             # We'll shutdown here
+            STDERR.puts "\n\npanic! #{reason.inspect}\n\n\n"
+            STDERR.flush
             Reactor.instance.shutdown
         end
 
@@ -188,13 +192,13 @@ module SpiderGazelle
                 case result
                 when :validated
                     @validated.each do |old|
-                        old.write "\x02update\x03".freeze
+                        old.write "\x02update\x03"
                     end
                     @validated << client
                     if @validated.length > 1
-                        client.write "\x02wait\x03".freeze
+                        client.write "\x02wait\x03"
                     else
-                        client.write "\x02ready\x03".freeze
+                        client.write "\x02ready\x03"
                     end
                     @logger.verbose { "Client <0x#{client.object_id.to_s(16)}> connection was validated" }
                 when :close_connection

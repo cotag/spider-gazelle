@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'thread'
 
 module SpiderGazelle
@@ -15,11 +17,11 @@ module SpiderGazelle
                         return if @loaded[rackup]
 
                         app, opts = ::Rack::Builder.parse_file(rackup)
-                        app = Rack::Lint.new(app) if options[:verbose]
+                        app = Rack::Lint.new(app) if options[:lint]
                         tls = configure_tls(options)
                         port = tls ? 443 : 80
 
-                        val = [app, options[:app_mode], port.to_s, tls]
+                        val = [app, port.to_s, tls]
                         @apps << val
                         @loaded[rackup] = val
                     }
@@ -41,7 +43,7 @@ module SpiderGazelle
                     tls = configure_tls(options)
                     port = tls ? 443 : 80
 
-                    val = [app, options[:app_mode], port, tls]
+                    val = [app, port.to_s, tls]
                     @apps << val
                     @loaded[obj_id] = val
 
@@ -59,8 +61,8 @@ module SpiderGazelle
                 @apps[id.to_i]
             end
 
-            PROTOCOLS = ['h2'.freeze, 'http/1.1'.freeze].freeze
-            FALLBACK = 'http/1.1'.freeze
+            PROTOCOLS = ['h2', 'http/1.1'].freeze
+            FALLBACK = 'http/1.1'
             def self.configure_tls(opts)
                 return false unless opts[:tls]
 

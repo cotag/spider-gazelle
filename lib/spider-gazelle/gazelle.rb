@@ -1,5 +1,6 @@
+# frozen_string_literal: true
+
 require "rack"            # Ruby webserver abstraction
-require "rack/lock_patch" # Serialize execution in development mode
 require 'spider-gazelle/gazelle/app_store'
 require 'spider-gazelle/gazelle/http1'
 
@@ -10,7 +11,7 @@ require "spider-gazelle/upgrades/websocket"
 
 module SpiderGazelle
     class Gazelle
-        SPACE = ' '.freeze
+        SPACE = ' '
 
         def initialize(thread, type)
             raise ArgumentError, "type must be one of #{MODES}" unless MODES.include?(type)
@@ -52,23 +53,13 @@ module SpiderGazelle
             socket = @pipe.check_pending
             return if socket.nil?
             process_connection(socket, data.to_i)
+        rescue => e
+            @logger.print_error(e)
         end
 
-        def shutdown(finished = nil)
-            # Wait for the requests to finish (give them 15 seconds)
-            # TODO::
-
+        def shutdown
+            # Wait for the requests to finish
             @logger.verbose { "Gazelle: #{@type} Pid: #{Process.pid} shutting down" }
-
-            # Then stop the current thread if we are in threaded mode
-            if @type == :thread
-                # In threaded mode the gazelle has the power
-                @thread.stop
-            else
-                # Both no_ipc and process need to know when the requests
-                # have completed to shutdown
-                finished.resolve(true)
-            end
         end
 
 
@@ -84,8 +75,8 @@ module SpiderGazelle
                 authenticate
             end
 
-            @pipe.catch do |error|
-                @logger.print_error(error)
+            @pipe.catch do |error, backtrace|
+                @logger.print_error(error, String.new, backtrace)
             end
 
             @pipe.finally do
@@ -93,7 +84,7 @@ module SpiderGazelle
                     Reactor.instance.shutdown
                 else
                     # Threaded mode
-                    shutdown
+                    connect_to_spider
                 end
             end
         end
@@ -141,7 +132,7 @@ module SpiderGazelle
         end
 
         def set_protocol(socket, version)
-            app, app_mode, port, tls = socket.storage
+            app, port, tls = socket.storage
 
             parser = if version == :h2
                 @http2_cache.pop || new_http2_parser
@@ -149,7 +140,7 @@ module SpiderGazelle
                 @http1_cache.pop || new_http1_parser
             end
 
-            parser.load(socket, port, app, app_mode, tls)
+            parser.load(socket, port, app, tls)
             socket.progress @on_progress
             socket.storage = parser
         end

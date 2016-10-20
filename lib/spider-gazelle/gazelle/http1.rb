@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 
 require 'http-parser'     # C based, fast, http parser
 require 'spider-gazelle/gazelle/request'
@@ -30,10 +31,10 @@ module SpiderGazelle
                     req.header.frozen? ? req.header = header : req.header << header
                 end
 
-                DASH       = '-'.freeze
-                UNDERSCORE = '_'.freeze
-                HTTP_META  = 'HTTP_'.freeze
-                COMMA      = ', '.freeze
+                DASH       = '-'
+                UNDERSCORE = '_'
+                HTTP_META  = 'HTTP_'
+                COMMA      = ', '
 
                 def on_header_value(parser, value)
                     req = @connection.parsing
@@ -49,7 +50,7 @@ module SpiderGazelle
                             req.env[header] << COMMA
                             req.env[header] << value
                         else
-                            req.env[header] = value
+                            req.env[header] = String.new(value)
                         end
                     end
                 end
@@ -78,18 +79,8 @@ module SpiderGazelle
                 @thread = thread
                 @logger = logger
 
-                @work_complete = proc { |request, result|
-                    if request.is_async && !request.hijacked
-                        if result.is_a?(Fixnum) && !request.defer.resolved?
-                            # TODO:: setup timeout for async response
-                        end
-                    else
-                        # Complete the current request
-                        request.defer.resolve(result)
-                    end
-                }
-
-                @queue_response = method(:queue_response)
+                @queue_response = method :queue_response
+                @write_chunk = method :write_chunk
 
                 # The parser state for this instance
                 @state = ::HttpParser::Parser.new_instance do |inst|
@@ -108,28 +99,13 @@ module SpiderGazelle
             def self.on_progress(data, socket); end
             DUMMY_PROGRESS = self.method :on_progress
 
-            HTTP = 'http'.freeze
-            HTTPS = 'https'.freeze
+            HTTP = 'http'
+            HTTPS = 'https'
 
-            def load(socket, port, app, app_mode, tls)
+            def load(socket, port, app, tls)
                 @socket = socket
                 @port = port
                 @app = app
-                @mode = app_mode
-
-                case @mode
-                when :thread_pool
-                    @exec = method :exec_on_thread_pool
-                when :fiber_pool
-                    # TODO:: Implement these modes
-                    @exec = method :critical_error
-                when :libuv
-                    @exec = method :critical_error
-                when :eventmachine
-                    @exec = method :critical_error
-                when :celluloid
-                    @exec = method :critical_error
-                end
 
                 @remote_ip = socket.peername[0]
                 @scheme = tls ? HTTPS : HTTP
@@ -182,15 +158,15 @@ module SpiderGazelle
             # Parser Callbacks
             # ----------------
             def start_parsing
-                @parsing = Request.new @thread, @app, @port, @remote_ip, @scheme
+                @parsing = Request.new @thread, @app, @port, @remote_ip, @scheme, @socket
             end
 
-            REQUEST_METHOD = 'REQUEST_METHOD'.freeze
+            REQUEST_METHOD = 'REQUEST_METHOD'
             def headers_complete
                 @parsing.env[REQUEST_METHOD] = @state.http_method.to_s
             end
 
-            ASYNC = "async.callback".freeze
+            ASYNC = "async.callback"
             def finished_parsing
                 request = @parsing
                 @parsing = nil
@@ -205,52 +181,54 @@ module SpiderGazelle
                 # See: http://polycrystal.org/2012/04/15/asynchronous_responses_in_rack.html
                 # Process a response that was marked as async.
                 request.env[ASYNC] = proc { |data|
-                    @thread.schedule { request.defer.resolve(data) }
+                    @thread.schedule { request.defer.resolve([request, data]) }
                 }
                 request.upgrade = @state.upgrade?
                 @requests << request
-                process_next unless @processing
+
+                unless @processing
+                    ::Fiber.new { process_next }.resume
+                end
             end
 
             # ------------------
             # Request Processing
             # ------------------
+            EMPTY_RESPONSE = [''].freeze
             def process_next
                 @processing = @requests.shift
                 if @processing
-                    @exec.call
-                    @processing.then @queue_response
+                    request = @processing
+                    begin
+                        result = begin
+                            request.execute!
+                        rescue StandardError => e
+                            @logger.print_error e, 'framework error'
+                            @processing.keep_alive = false
+                            [500, {}, EMPTY_RESPONSE]
+                        end
+
+                        if request.is_async && !request.hijacked
+                            if result.nil? && !request.defer.resolved?
+                                # TODO:: setup timeout for async response
+                            end
+                        else
+                            # Complete the current request
+                            request.defer.resolve([request, result])
+                        end
+                        request.then @queue_response
+                    rescue Exception => error
+                        Logger.instance.print_error error, 'critical error'
+                        Reactor.instance.shutdown
+                    end
                 end
             end
-
-            WORKER_ERROR = proc { |error|
-                Logger.instance.print_error error, 'critical error'
-                Reactor.instance.shutdown
-            }
-            def exec_on_thread_pool
-                request = @processing
-                promise = @thread.work { work(request) }
-                promise.then @work_complete
-                promise.catch WORKER_ERROR
-            end
-
-            EMPTY_RESPONSE = [''.freeze].freeze
-            def work(request)
-                begin
-                    [request, request.execute!]
-                rescue StandardError => e
-                    @logger.print_error e, 'framework error'
-                    @processing.keep_alive = false
-                    [request, [500, {}, EMPTY_RESPONSE]]
-                end
-            end
-
 
             # ----------------
             # Response Sending
             # ----------------
-            def queue_response(result)
-                @responses << [@processing, result]
+            def queue_response(response)
+                @responses << response
                 send_next_response unless @transmitting
 
                 # Processing will be set to nil if the array is empty
@@ -258,14 +236,14 @@ module SpiderGazelle
             end
 
 
-            HEAD = 'HEAD'.freeze
-            ETAG = 'ETag'.freeze
-            HTTP_ETAG = 'HTTP_ETAG'.freeze
-            CONTENT_LENGTH2 = 'Content-Length'.freeze
-            TRANSFER_ENCODING = 'Transfer-Encoding'.freeze
-            CHUNKED = 'chunked'.freeze
-            ZERO = '0'.freeze
-            NOT_MODIFIED_304 = "HTTP/1.1 304 Not Modified\r\n".freeze
+            HEAD = 'HEAD'
+            ETAG = 'ETag'
+            HTTP_ETAG = 'HTTP_ETAG'
+            CONTENT_LENGTH2 = 'Content-Length'
+            TRANSFER_ENCODING = 'Transfer-Encoding'
+            CHUNKED = 'chunked'
+            ZERO = '0'
+            NOT_MODIFIED_304 = "HTTP/1.1 304 Not Modified\r\n"
 
             def send_next_response
                 request, result = @responses.shift
@@ -381,7 +359,7 @@ module SpiderGazelle
                 end
             end
 
-            CLOSE_CHUNKED = "0\r\n\r\n".freeze
+            CLOSE_CHUNKED = "0\r\n\r\n"
             def write_response(request, status, headers, body)
                 keep_alive = request.keep_alive
 
@@ -397,7 +375,6 @@ module SpiderGazelle
                     write_headers keep_alive, status, headers
 
                     # Stream the response
-                    @write_chunk ||= method :write_chunk
                     body.each &@write_chunk
 
                     @socket.write CLOSE_CHUNKED
@@ -407,8 +384,8 @@ module SpiderGazelle
                 body.close if body.respond_to?(:close)
             end
 
-            COLON_SPACE = ': '.freeze
-            LINE_END = "\r\n".freeze
+            COLON_SPACE = ': '
+            LINE_END = "\r\n"
             def add_header(header, key, value)
                 header << key
                 header << COLON_SPACE
@@ -416,14 +393,14 @@ module SpiderGazelle
                 header << LINE_END
             end
 
-            CONNECTION = "Connection".freeze
-            NEWLINE = "\n".freeze
-            CLOSE = "close".freeze
-            RACK = "rack".freeze
+            CONNECTION = "Connection"
+            NEWLINE = "\n"
+            CLOSE = "close"
+            RACK = "rack"
             def write_headers(keep_alive, status, headers)
                 headers[CONNECTION] = CLOSE if keep_alive == false
 
-                header = "HTTP/1.1 #{status} #{fetch_code(status)}\r\n"
+                header = String.new("HTTP/1.1 #{status} #{fetch_code(status)}\r\n")
                 headers.each do |key, value|
                     next if key.start_with? RACK
                     value.to_s.split(NEWLINE).each {|val| add_header(header, key, val)}
@@ -439,7 +416,7 @@ module SpiderGazelle
             end
 
             HTTP_STATUS_CODES = Rack::Utils::HTTP_STATUS_CODES
-            HTTP_STATUS_DEFAULT = proc { 'CUSTOM'.freeze }
+            HTTP_STATUS_DEFAULT = proc { 'CUSTOM' }
             def fetch_code(status)
                 HTTP_STATUS_CODES.fetch(status, &HTTP_STATUS_DEFAULT)
             end
@@ -469,7 +446,7 @@ module SpiderGazelle
                 end
             end
 
-            ERROR_400_RESPONSE = "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n".freeze
+            ERROR_400_RESPONSE = "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
             def send_parsing_error
                 @logger.info "Parsing error!"
                 @socket.stop_read
@@ -477,7 +454,7 @@ module SpiderGazelle
                 @socket.shutdown
             end
 
-            ERROR_500_RESPONSE = "HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\nContent-Length: 0\r\n\r\n".freeze
+            ERROR_500_RESPONSE = "HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
             def send_internal_error
                 @logger.info "Internal error"
                 @socket.stop_read

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'libuv'
 require 'spider-gazelle/logger'
 
@@ -9,7 +11,7 @@ module SpiderGazelle
 
 
         def initialize
-            @thread = ::Libuv::Loop.default
+            @thread = ::Libuv::Reactor.default
             @logger = Logger.instance
             @running = false
             @shutdown = method(:shutdown)
@@ -21,18 +23,15 @@ module SpiderGazelle
                 @thread.schedule block
             else
                 @running = true
-                @thread.run { |logger|
-                    logger.progress method(:log)
-                    
-                    # Listen for the signal to shutdown
-                    @thread.signal :INT, @shutdown
-
+                @thread.notifier method(:log)
+                @thread.on_program_interrupt @shutdown
+                @thread.run { |thread|
                     block.call
                 }
             end
         end
 
-        def shutdown(_ = nil)
+        def shutdown
             if @shutdown_called
                 @logger.warn "Shutdown called twice! Callstack:\n#{caller.join("\n")}"
                 return
@@ -54,12 +53,13 @@ module SpiderGazelle
         end
 
         # This is an unhandled error on the Libuv Event loop
-        def log(level, errorid, error)
-            msg = ''
+        def log(error, context, trace = nil)
+            msg = String.new
             if error.respond_to?(:backtrace)
-                msg << "unhandled exception: #{error.message} (#{level} - #{errorid})"
+                msg << "unhandled exception: #{error.message} (#{context})"
                 backtrace = error.backtrace
                 msg << "\n#{backtrace.join("\n")}" if backtrace
+                msg << "\n#{trace.join("\n")}" if trace
             else
                 msg << "unhandled exception: #{args}"
             end

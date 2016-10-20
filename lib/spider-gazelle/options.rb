@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'set'
 require 'optparse'
 require 'spider-gazelle/logger'
@@ -10,10 +12,9 @@ module SpiderGazelle
             port: 3000,
             verbose: false,
             tls: false,
-            backlog: 5000,
+            backlog: 4096,
             rackup: "#{Dir.pwd}/config.ru",
             mode: :thread,
-            app_mode: :thread_pool,
             isolate: true
         }.freeze
 
@@ -59,12 +60,12 @@ module SpiderGazelle
                     options[:rackup] = arg
                 end
 
-                opts.on "-m", "--mode MODE", MODES, "Either process, thread or no_ipc (default: process)" do |arg|
-                    options[:mode] = arg
+                opts.on "-rl", "--rack-lint", "enable rack lint on all requests" do
+                    options[:lint] = true
                 end
 
-                opts.on "-a", "--app-mode MODE", APP_MODE, "How should requests be processed (default: thread_pool)" do |arg|
-                    options[:host] = arg
+                opts.on "-m", "--mode MODE", MODES, "Either process, thread or no_ipc (default: thread)" do |arg|
+                    options[:mode] = arg
                 end
 
                 opts.on "-b", "--backlog BACKLOG", Integer, "Number of pending connections allowed (default: 5000)" do |arg|
@@ -175,7 +176,7 @@ module SpiderGazelle
 
             # Ensure there is at least one component
             # (This will occur when no options are provided)
-            components << '' if components.empty?
+            components << String.new if components.empty?
 
             # Parse the commandline options
             options = []
