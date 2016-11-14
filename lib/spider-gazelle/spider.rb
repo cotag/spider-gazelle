@@ -352,7 +352,7 @@ module SpiderGazelle
 
                 else
                     # End communication with the gazelle threads / processes
-                    gazelles.each do |gazelle|
+                    gazelles.dup.each do |gazelle|
                         promises << gazelle.close
                     end
                 end

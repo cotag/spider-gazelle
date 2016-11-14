@@ -79,12 +79,9 @@ module SpiderGazelle
                 @logger.print_error(error, String.new, backtrace)
             end
 
-            @pipe.finally do
-                if @type == :process
+            if @type == :process
+                @pipe.finally do
                     Reactor.instance.shutdown
-                else
-                    # Threaded mode
-                    connect_to_spider
                 end
             end
         end
