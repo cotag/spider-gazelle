@@ -62,13 +62,12 @@ module SpiderGazelle
             end
 
             PROTOCOLS = ['h2', 'http/1.1'].freeze
-            FALLBACK = 'http/1.1'
             def self.configure_tls(opts)
                 return false unless opts[:tls]
 
                 tls = {
                     protocols: PROTOCOLS,
-                    fallback: FALLBACK
+                    fallback: 'http/1.1'
                 }
                 tls[:verify_peer] = true if opts[:verify_peer]
                 tls[:ciphers] = opts[:ciphers] if opts[:ciphers]

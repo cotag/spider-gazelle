@@ -31,11 +31,6 @@ module SpiderGazelle
                     req.header.frozen? ? req.header = header : req.header << header
                 end
 
-                DASH       = '-'
-                UNDERSCORE = '_'
-                HTTP_META  = 'HTTP_'
-                COMMA      = ', '
-
                 def on_header_value(parser, value)
                     req = @connection.parsing
                     if req.header.frozen?
@@ -43,11 +38,11 @@ module SpiderGazelle
                     else
                         header = req.header
                         header.upcase!
-                        header.gsub!(DASH, UNDERSCORE)
-                        header.prepend(HTTP_META)
+                        header.gsub!('-', '_')
+                        header.prepend('HTTP_')
                         header.freeze
                         if req.env[header]
-                            req.env[header] << COMMA
+                            req.env[header] << ', '
                             req.env[header] << value
                         else
                             req.env[header] = String.new(value)
@@ -99,16 +94,13 @@ module SpiderGazelle
             def self.on_progress(data, socket); end
             DUMMY_PROGRESS = self.method :on_progress
 
-            HTTP = 'http'
-            HTTPS = 'https'
-
             def load(socket, port, app, tls)
                 @socket = socket
                 @port = port
                 @app = app
 
                 @remote_ip = socket.peername[0]
-                @scheme = tls ? HTTPS : HTTP
+                @scheme = tls ? 'https' : 'http'
 
                 set_on_close(socket)
             end
@@ -161,12 +153,10 @@ module SpiderGazelle
                 @parsing = Request.new @thread, @app, @port, @remote_ip, @scheme, @socket
             end
 
-            REQUEST_METHOD = 'REQUEST_METHOD'
             def headers_complete
-                @parsing.env[REQUEST_METHOD] = @state.http_method.to_s
+                @parsing.env['REQUEST_METHOD'] = @state.http_method.to_s
             end
 
-            ASYNC = "async.callback"
             def finished_parsing
                 request = @parsing
                 @parsing = nil
@@ -180,7 +170,7 @@ module SpiderGazelle
                 # Process the async request in the same way as Mizuno
                 # See: http://polycrystal.org/2012/04/15/asynchronous_responses_in_rack.html
                 # Process a response that was marked as async.
-                request.env[ASYNC] = proc { |data|
+                request.env['async.callback'] = proc { |data|
                     @thread.schedule { request.defer.resolve([request, data]) }
                 }
                 request.upgrade = @state.upgrade?
@@ -235,16 +225,6 @@ module SpiderGazelle
                 process_next
             end
 
-
-            HEAD = 'HEAD'
-            ETAG = 'ETag'
-            HTTP_ETAG = 'HTTP_ETAG'
-            CONTENT_LENGTH2 = 'Content-Length'
-            TRANSFER_ENCODING = 'Transfer-Encoding'
-            CHUNKED = 'chunked'
-            ZERO = '0'
-            NOT_MODIFIED_304 = "HTTP/1.1 304 Not Modified\r\n"
-
             def send_next_response
                 request, result = @responses.shift
                 @transmitting = request
@@ -262,7 +242,7 @@ module SpiderGazelle
                     body.close if body.respond_to?(:close)
                 else
                     status, headers, body = result
-                    send_body = request.env[REQUEST_METHOD] != HEAD
+                    send_body = request.env['REQUEST_METHOD'] != 'HEAD'
 
                     # If a file, stream the body in a non-blocking fashion
                     if body.respond_to? :to_path
@@ -280,17 +260,17 @@ module SpiderGazelle
                                 #if etag == request.env[HTTP_ETAG]
                                 #    header = NOT_MODIFIED_304.dup
                                 #    add_header(header, ETAG, etag)
-                                #    header << LINE_END
+                                #    header << "\r\n"
                                 #    @socket.write header
                                 #    return
                                 #end
                                 #headers[ETAG] ||= etag
 
-                                if headers[CONTENT_LENGTH2]
+                                if headers['Content-Length']
                                     type = :raw
                                 else
                                     type = :http
-                                    headers[TRANSFER_ENCODING] = CHUNKED
+                                    headers['Transfer-Encoding'] = 'chunked'
                                 end
 
                                 data_written = true
@@ -339,7 +319,7 @@ module SpiderGazelle
                         # Optimize the response
                         begin
                             if body.size < 2
-                                headers[CONTENT_LENGTH2] = body.size == 1 ? body[0].bytesize.to_s : ZERO
+                                headers['Content-Length'] = body.size == 1 ? body[0].bytesize.to_s : '0'
                             end
                         rescue # just in case
                         end
@@ -359,59 +339,51 @@ module SpiderGazelle
                 end
             end
 
-            CLOSE_CHUNKED = "0\r\n\r\n"
             def write_response(request, status, headers, body)
                 keep_alive = request.keep_alive
 
-                if headers[CONTENT_LENGTH2]
-                    headers[CONTENT_LENGTH2] = headers[CONTENT_LENGTH2].to_s
+                if headers['Content-Length']
+                    headers['Content-Length'] = headers['Content-Length'].to_s
                     write_headers keep_alive, status, headers
 
                     # Stream the response (pass directly into @socket.write)
                     body.each &@socket.method(:write)
                     @socket.shutdown if keep_alive == false
                 else
-                    headers[TRANSFER_ENCODING] = CHUNKED
+                    headers['Transfer-Encoding'] = 'chunked'
                     write_headers keep_alive, status, headers
 
                     # Stream the response
                     body.each &@write_chunk
 
-                    @socket.write CLOSE_CHUNKED
+                    @socket.write "0\r\n\r\n"
                     @socket.shutdown if keep_alive == false
                 end
 
                 body.close if body.respond_to?(:close)
             end
 
-            COLON_SPACE = ': '
-            LINE_END = "\r\n"
             def add_header(header, key, value)
                 header << key
-                header << COLON_SPACE
+                header << ': '
                 header << value
-                header << LINE_END
+                header << "\r\n"
             end
 
-            CONNECTION = "Connection"
-            NEWLINE = "\n"
-            CLOSE = "close"
-            RACK = "rack"
             def write_headers(keep_alive, status, headers)
-                headers[CONNECTION] = CLOSE if keep_alive == false
+                headers['Connection'] = 'close' if keep_alive == false
 
                 header = String.new("HTTP/1.1 #{status} #{fetch_code(status)}\r\n")
                 headers.each do |key, value|
-                    next if key.start_with? RACK
-                    value.to_s.split(NEWLINE).each {|val| add_header(header, key, val)}
+                    next if key.start_with? 'rack'
+                    value.to_s.split("\n").each {|val| add_header(header, key, val)}
                 end
-                header << LINE_END
+                header << "\r\n"
                 @socket.write header
             end
 
-            HEX_ENCODED = 16
             def write_chunk(part)
-                chunk = part.bytesize.to_s(HEX_ENCODED) << LINE_END << part << LINE_END
+                chunk = part.bytesize.to_s(16) << "\r\n" << part << "\r\n"
                 @socket.write chunk
             end
 
@@ -446,19 +418,17 @@ module SpiderGazelle
                 end
             end
 
-            ERROR_400_RESPONSE = "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
             def send_parsing_error
                 @logger.info "Parsing error!"
                 @socket.stop_read
-                @socket.write ERROR_400_RESPONSE
+                @socket.write "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
                 @socket.shutdown
             end
 
-            ERROR_500_RESPONSE = "HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
             def send_internal_error
                 @logger.info "Internal error"
                 @socket.stop_read
-                @socket.write ERROR_500_RESPONSE
+                @socket.write "HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
                 @socket.shutdown
             end
         end
