@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "rack"            # Ruby webserver abstraction
+require 'rack' # Ruby webserver abstraction
 require 'spider-gazelle/gazelle/app_store'
 require 'spider-gazelle/gazelle/http1'
 
@@ -11,8 +11,6 @@ require "spider-gazelle/upgrades/websocket"
 
 module SpiderGazelle
     class Gazelle
-        SPACE = ' '
-
         def initialize(thread, type)
             raise ArgumentError, "type must be one of #{MODES}" unless MODES.include?(type)
             
