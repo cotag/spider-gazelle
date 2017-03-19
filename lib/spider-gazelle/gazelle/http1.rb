@@ -246,15 +246,31 @@ module SpiderGazelle
 
                     # If a file, stream the body in a non-blocking fashion
                     if body.respond_to? :to_path
-                        file = @thread.file body.to_path, File::RDONLY
+                        begin
+                            file = @thread.file body.to_path, File::RDONLY, wait: true
 
-                        # Send the body in parallel without blocking the next request in dev
-                        # Also if this is a head request we still want the body closed
-                        body.close if body.respond_to?(:close)
-                        data_written = false
+                            file.catch do |err|
+                                @logger.warn "Error reading file: #{err}"
 
-                        file.progress do
-                            statprom = file.stat
+                                if data_written
+                                    file.close
+                                    @socket.shutdown
+                                else
+                                    send_internal_error
+                                end
+                            end
+
+                            # Request has completed - send the next one
+                            file.finally do
+                                send_next_response
+                            end
+
+                            # Send the body in parallel without blocking the next request in dev
+                            # Also if this is a head request we still want the body closed
+                            body.close if body.respond_to?(:close)
+                            data_written = false
+
+                            statprom = file.stat wait: false
                             statprom.then do |stats|
                                 #etag = ::Digest::MD5.hexdigest "#{stats[:st_mtim][:tv_sec]}#{body.to_path}"
                                 #if etag == request.env[HTTP_ETAG]
@@ -278,7 +294,7 @@ module SpiderGazelle
 
                                 if send_body
                                     # File is open and available for reading
-                                    promise = file.send_file(@socket, type)
+                                    promise = file.send_file(@socket, using: type)
                                     promise.then do
                                         file.close
                                         @socket.shutdown if request.keep_alive == false
@@ -298,22 +314,9 @@ module SpiderGazelle
                                 file.close
                                 send_internal_error
                             end
-                        end
-
-                        file.catch do |err|
+                        rescue => err
                             @logger.warn "Error reading file: #{err}"
-
-                            if data_written
-                                file.close
-                                @socket.shutdown
-                            else
-                                send_internal_error
-                            end
-                        end
-
-                        # Request has completed - send the next one
-                        file.finally do
-                            send_next_response
+                            send_internal_error
                         end
                     else
                         # Optimize the response
