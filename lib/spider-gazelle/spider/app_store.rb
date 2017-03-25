@@ -3,7 +3,7 @@
 require 'thread'
 
 module SpiderGazelle
-    class Gazelle
+    class Spider
         module AppStore
             @apps = []
             @loaded = {}
@@ -21,7 +21,7 @@ module SpiderGazelle
                         tls = configure_tls(options)
                         port = tls ? 443 : 80
 
-                        val = [app, port.to_s, tls]
+                        val = [app, port, tls]
                         @apps << val
                         @loaded[rackup] = val
                     }

@@ -5,7 +5,7 @@ require 'spider-gazelle/gazelle/request'
 
 
 module SpiderGazelle
-    class Gazelle
+    class Spider
         class Http1
             class Callbacks
                 def initialize
@@ -150,7 +150,7 @@ module SpiderGazelle
             # Parser Callbacks
             # ----------------
             def start_parsing
-                @parsing = Request.new @thread, @app, @port, @remote_ip, @scheme, @socket
+                @parsing = Gazelle::Request.new @thread, @app, @port, @remote_ip, @scheme, @socket
             end
 
             def headers_complete

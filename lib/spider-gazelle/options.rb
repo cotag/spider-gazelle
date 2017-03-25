@@ -64,7 +64,7 @@ module SpiderGazelle
                     options[:lint] = true
                 end
 
-                opts.on "-m", "--mode MODE", MODES, "Either process, thread or no_ipc (default: thread)" do |arg|
+                opts.on "-m", "--mode MODE", MODES, "Either thread or inline (default: thread)" do |arg|
                     options[:mode] = arg
                 end
 

@@ -20,14 +20,8 @@ module SpiderGazelle
     # * Live updates (bindings passed by this pipe)
     SIGNAL_SERVER = '/tmp/sg-signaller.pipe'
 
-    # Spider server is used to
-    # * Track gazelles
-    # * Signal shutdown as required
-    # * Pass sockets
-    SPIDER_SERVER = '/tmp/sg-spider.pipe.'
 
-
-    MODES = [:process, :thread, :no_ipc].freeze
+    MODES = [:thread, :inline].freeze
 
 
     class LaunchControl
@@ -103,18 +97,6 @@ module SpiderGazelle
         end
 
 
-
-        # ---------------------------------------
-        # GAZELLE LAUNCH CONTROL
-        # ---------------------------------------
-        def start_gazelle(signaller, logger, options)
-            logger.set_client signaller.pipe
-
-            require 'spider-gazelle/gazelle'
-            ::SpiderGazelle::Gazelle.new(logger.thread, :process).run!(options)
-        end
-
-
         # ---------------------------------------
         # TTY SIGNALLING CONTROL
         # ---------------------------------------
@@ -148,9 +130,6 @@ module SpiderGazelle
                     if master[:spider]
                         logger.verbose "Starting Spider"
                         start_spider(signaller, logger, options)
-                    elsif master[:gazelle]
-                        logger.verbose "Starting Gazelle"
-                        start_gazelle(signaller, logger, options)
                     else
                         logger.verbose "Sending signal to SG Master"
                         signal_master(reactor, signaller, logger, options)
