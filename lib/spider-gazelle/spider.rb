@@ -42,7 +42,7 @@ module SpiderGazelle
             @loading = {}     # mode => load defer
             @bindings = {}    # port => binding
             @iterators = {}   # mode => gazelle round robin iterator
-            @iterator_source = {}   # mode => gazelle pipe array (iterator source)
+            @iterator_source = {}   # mode => gazelle thread array (iterator source)
 
             @running = true
             @loaded = false
@@ -144,8 +144,10 @@ module SpiderGazelle
                 @gazelles[:inline] = gaz
 
                 # Setup the round robin
-                @iterator_source[mode] = gaz
-                @iterators[mode] = gaz
+                itr = [gaz]
+                @iterator_source[mode] = [gaz]
+                @iterators[mode] = [gaz.thread].cycle
+
                 defer.resolve(true)
             else
                 require 'thread'
@@ -168,7 +170,10 @@ module SpiderGazelle
                     Thread.new { load_gazelle_thread(reactor, thread, mode, options, loading) }
                 end
 
-                defer.resolve(@thread.all(*loaded))
+                defer.resolve(@thread.all(*loaded).then { |gazelles|
+                    @iterator_source[mode] = gazelles
+                    @iterators[mode] = gazelles.map { |gaz| gaz.thread }.cycle
+                })
             end
 
             defer.promise
@@ -188,10 +193,11 @@ module SpiderGazelle
             end
             thread.run do |thread|
                 # Start the gazelle
+                gaz = ::SpiderGazelle::Gazelle.new(thread, :thread)
                 thread.next_tick do
-                    loading.resolve(true)
+                    loading.resolve(gaz)
                 end
-                ::SpiderGazelle::Gazelle.new(thread, :thread).run!(options)
+                gaz.run!(options)
             end
         end
 
@@ -235,17 +241,11 @@ module SpiderGazelle
             promises = []
 
             @iterator_source.each do |mode, gazelles|
-                if mode == :inline
-                    # itr is a gazelle in inline mode
+                # End communication with the gazelle threads
+                gazelles.each do |gazelle|
                     defer = @thread.defer
-                    gazelles.shutdown(defer)
+                    gazelle.shutdown(defer)
                     promises << defer.promise
-
-                else
-                    # End communication with the gazelle threads
-                    gazelles.dup.each do |gazelle|
-                        promises << gazelle.signal_shutdown
-                    end
                 end
             end
 

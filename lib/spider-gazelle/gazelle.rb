@@ -15,7 +15,12 @@ module SpiderGazelle
             @type = type
             @logger = Logger.instance
             @thread = thread
+            @thread.ref
         end
+
+
+        attr_reader :thread
+
 
         def run!(options)
             @options = options
@@ -24,12 +29,15 @@ module SpiderGazelle
             self
         end
 
-        def shutdown
-            # Wait for the requests to finish
-            @logger.verbose { "Gazelle: #{@type} shutting down" }
+        def shutdown(defer)
+            @thread.schedule do
+                # TODO:: Wait for the requests to finish
+                @thread.unref
+                @logger.verbose { "Gazelle: #{@type} shutting down" }
+                @thread.stop
+                defer.resolve(true)
+            end
         end
-
-
 
 
         protected

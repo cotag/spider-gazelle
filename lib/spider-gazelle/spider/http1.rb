@@ -67,7 +67,7 @@ module SpiderGazelle
             Hijack = Struct.new :socket, :env
 
 
-            def initialize(return_method, callbacks, thread, logger)
+            def initialize(return_method, callbacks, thread, logger, gazelles)
                 # The HTTP parser callbacks object for this thread
                 @return_method = return_method
                 @callbacks = callbacks
@@ -76,6 +76,7 @@ module SpiderGazelle
 
                 @queue_response = method :queue_response
                 @write_chunk = method :write_chunk
+                @gazelles = gazelles
 
                 # The parser state for this instance
                 @state = ::HttpParser::Parser.new_instance do |inst|
@@ -160,12 +161,14 @@ module SpiderGazelle
             def finished_parsing
                 request = @parsing
                 @parsing = nil
+                request.keep_alive = @state.keep_alive?
+                request.upgrade = @state.upgrade?
 
-                if !@state.keep_alive?
-                    request.keep_alive = false
-                    # We don't expect any more data
-                    @socket.stop_read
-                end
+                @thread.next_tick { after_parsing(request) }
+            end
+
+            def after_parsing(request)
+                @socket.stop_read unless request.keep_alive
 
                 # Process the async request in the same way as Mizuno
                 # See: http://polycrystal.org/2012/04/15/asynchronous_responses_in_rack.html
@@ -173,12 +176,9 @@ module SpiderGazelle
                 request.env['async.callback'] = proc { |data|
                     @thread.schedule { request.defer.resolve([request, data]) }
                 }
-                request.upgrade = @state.upgrade?
                 @requests << request
 
-                unless @processing
-                    ::Fiber.new { process_next }.resume
-                end
+                process_next unless @processing
             end
 
             # ------------------
@@ -189,29 +189,34 @@ module SpiderGazelle
                 @processing = @requests.shift
                 if @processing
                     request = @processing
-                    begin
-                        result = begin
-                            request.execute!
-                        rescue StandardError => e
-                            @logger.print_error e, 'framework error'
-                            @processing.keep_alive = false
-                            [500, {}, EMPTY_RESPONSE]
-                        end
+                    request.then @queue_response
 
-                        if request.is_async && !request.hijacked
-                            if result.nil? && !request.defer.resolved?
-                                # TODO:: setup timeout for async response
-                            end
-                        else
-                            # Complete the current request
-                            request.defer.resolve([request, result])
-                        end
-                        request.then @queue_response
-                    rescue Exception => error
-                        Logger.instance.print_error error, 'critical error'
-                        Reactor.instance.shutdown
+                    @gazelles.next.schedule do
+                        process_on_gazelle(request)
                     end
                 end
+            end
+
+            def process_on_gazelle(request)
+                result = begin
+                    request.execute!
+                rescue StandardError => e
+                    Logger.instance.print_error e, 'framework error'
+                    request.keep_alive = false
+                    [500, {}, EMPTY_RESPONSE]
+                end
+
+                if request.is_async && !request.hijacked
+                    if result.nil? && !request.defer.resolved?
+                        # TODO:: setup timeout for async response
+                    end
+                else
+                    # Complete the current request
+                    request.defer.resolve([request, result])
+                end
+            rescue Exception => error
+                Logger.instance.print_error error, 'critical error'
+                Reactor.instance.shutdown
             end
 
             # ----------------

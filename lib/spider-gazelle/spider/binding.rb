@@ -14,11 +14,11 @@ module SpiderGazelle
                 @logger = Logger.instance
                 @signaller = Signaller.instance
                 @thread = @signaller.thread
+                @iterator = iterator
 
                 @port = @options[:port]
                 @app, @app_port, @tls = AppStore.lookup(options[:rackup])
 
-                @on_progress   = method(:on_progress)
                 @set_protocol  = method(:set_protocol)
 
                 @http1_cache = []
@@ -32,13 +32,18 @@ module SpiderGazelle
             def bind
                 # Bind the socket
                 @tcp = @thread.tcp
+                @tcp.enable_simultaneous_accepts
+                
                 if @tls
-                    @tcp.bind @options[:host], @port, method(:prepare_client_tls)
+                    @tcp.bind @options[:host], @port do |client|
+                        prepare_client_tls client
+                    end
                 else
-                    @tcp.bind @options[:host], @port, method(:prepare_client)
+                    @tcp.bind @options[:host], @port do |client|
+                        prepare_client client
+                    end
                 end
                 @tcp.listen 10000
-                @tcp.enable_simultaneous_accepts
 
                 @logger.info "Listening on tcp://#{@options[:host]}:#{@port}"
 
@@ -63,6 +68,9 @@ module SpiderGazelle
             protected
 
 
+            # ---------------------------
+            # Setup the client connection
+            # ---------------------------
             def prepare_client(client)
                 set_protocol(client, :http1)
                 client.start_read
@@ -85,21 +93,20 @@ module SpiderGazelle
                 end
 
                 parser.load(client, @app_port, @app, @tls)
-                client.storage = parser
-                client.progress @on_progress
+                client.progress do |data, _|
+                    parser.parse(data)
+                end
             end
 
-            def on_progress(data, client)
-                # Storage contains the parser for this connection
-                parser = client.storage
-                parser.parse(data)
-            end
 
+            # ---------------------------------------
+            # Select a protocol to handle the request
+            # ---------------------------------------
             def new_http1_parser
                 @h1_parser_obj ||= Http1::Callbacks.new
 
                 @parser_count += 1
-                Http1.new(@return_http1, @h1_parser_obj, @thread, @logger)
+                Http1.new(@return_http1, @h1_parser_obj, @thread, @logger, @iterator)
             end
 
             def return_http1(parser)
@@ -109,7 +116,7 @@ module SpiderGazelle
             def new_http2_parser
                 raise NotImplementedError.new 'TODO:: Create HTTP2 parser class'
                 @parser_count += 1
-                Http2.new(@return_http2)
+                Http2.new(@return_http2, @thread, @logger, @iterator)
             end
 
             def return_http2(parser)
