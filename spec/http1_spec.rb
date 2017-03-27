@@ -1,5 +1,5 @@
 require 'spider-gazelle'
-require 'spider-gazelle/gazelle/http1'
+require 'spider-gazelle/spider/http1'
 
 
 # TODO:: Mock logger
@@ -50,7 +50,7 @@ class MockLogger
     end
 end
 
-describe ::SpiderGazelle::Gazelle::Http1 do
+describe ::SpiderGazelle::Spider::Http1 do
     before :each do
         @shutdown_called = 0
         @close_called = 0
@@ -73,8 +73,8 @@ describe ::SpiderGazelle::Gazelle::Http1 do
             @returned = http1
         }
         @logger = MockLogger.new
-        @http1_callbacks ||= ::SpiderGazelle::Gazelle::Http1::Callbacks.new
-        @http1 = ::SpiderGazelle::Gazelle::Http1.new(@return, @http1_callbacks, @loop, @logger)
+        @http1_callbacks ||= ::SpiderGazelle::Spider::Http1::Callbacks.new
+        @http1 = ::SpiderGazelle::Spider::Http1.new(@return, @http1_callbacks, @loop, @logger, [@loop].cycle)
 
         @socket = MockSocket.new
         @socket.shutdown_cb = proc {

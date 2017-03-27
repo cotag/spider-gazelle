@@ -1,11 +1,12 @@
 language: ruby
 rvm:
-  - "2.1"
-  - "2.2"
+  - ruby-2.3.3
+  - ruby-2.4.1
   - ruby-head
-  - rbx-2
+  - jruby-9.1.8.0
   - jruby-head
 matrix:
   allow_failures:
-    - rvm: rbx-2
+    - ruby-head
+    - jruby-head
 sudo: false

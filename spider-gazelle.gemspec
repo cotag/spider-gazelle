@@ -26,7 +26,7 @@ Gem::Specification.new do |s|
     s.add_dependency 'http-2', '~> 0.8' # HTTP2 parsing and response management
 
     s.add_development_dependency 'rspec', '~> 3.5'  # Testing framework
-    s.add_development_dependency 'rake', '~> 11.2'  # Task runner
+    s.add_development_dependency 'rake', '~> 12'  # Task runner
     s.add_development_dependency 'yard', '~> 0.9'   # Comment based documentation generation
 
     s.files = Dir["{lib,bin}/**/*"] + %w(Rakefile spider-gazelle.gemspec README.md LICENSE)
