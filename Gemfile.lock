@@ -26,7 +26,7 @@ GEM
     http-parser (1.2.0)
       ffi-compiler (>= 1.0, < 2.0)
     ipaddress (0.8.3)
-    libuv (3.1.6)
+    libuv (3.1.7)
       concurrent-ruby (~> 1.0)
       ffi (~> 1.9)
       ruby-tls (~> 2.1)
