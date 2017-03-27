@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
+require 'spider-gazelle/spider/app_store'      # Manages the loaded applications
 require 'spider-gazelle/spider/binding'        # Holds a reference to a bound port
+require 'spider-gazelle/spider/http1'          # Parses and responds to HTTP1 requests
 require 'securerandom'
 
 
@@ -30,9 +32,8 @@ module SpiderGazelle
 
             # Gazelle pipe connection management
             @gazelles = {
-                # process: [],
                 # thread: [],
-                # no_ipc: gazelle_instance
+                # inline: gazelle_instance
             }
             @counts = {
                 # process: number
@@ -41,9 +42,7 @@ module SpiderGazelle
             @loading = {}     # mode => load defer
             @bindings = {}    # port => binding
             @iterators = {}   # mode => gazelle round robin iterator
-            @iterator_source = {}   # mode => gazelle pipe array (iterator source)
-
-            @password = SecureRandom.hex
+            @iterator_source = {}   # mode => gazelle thread array (iterator source)
 
             @running = true
             @loaded = false
@@ -64,7 +63,6 @@ module SpiderGazelle
 
         # Load gazelles and make the required bindings
         def ready
-            start_gazelle_server
             load_promise = load_applications
             load_promise.then do
                 # Check a shutdown request didn't occur as we were loading
@@ -116,82 +114,6 @@ module SpiderGazelle
         protected
 
 
-        # This starts the server the gazelles will be connecting to
-        def start_gazelle_server
-            @pipe_file = "#{SPIDER_SERVER}#{Process.pid}"
-            @logger.verbose { "Spider server starting on #{@pipe_file}" }
-
-            @pipe = @thread.pipe :ipc
-            begin
-                File.unlink @pipe_file
-            rescue
-            end
-
-            @shutdown = false
-            check = method(:check_credentials)
-            @pipe.bind(@pipe_file) do |client|
-                @logger.verbose { "Gazelle <0x#{client.object_id.to_s(16)}> connection made" }
-
-                # Shutdown if there is an error with any of the gazelles
-                client.catch do |error|
-                    begin
-                        @logger.print_error(error, "Gazelle <0x#{client.object_id.to_s(16)}> connection error")
-                    rescue
-                    end
-                end
-
-                # Client closed gracefully
-                client.finally do
-                    begin
-                        @logger.verbose { "Gazelle <0x#{client.object_id.to_s(16)}> disconnected" }
-                    rescue
-                    ensure
-                        @gazelles.delete client
-                        if !@shutdown
-                            @shutdown = true
-                            @signaller.general_failure
-                        end
-                    end
-                end
-
-                client.progress check
-                client.start_read
-            end
-
-            # catch server errors
-            @pipe.catch do |error|
-                @logger.print_error(error)
-                @signaller.general_failure
-            end
-
-            # start listening
-            @pipe.listen(INTERNAL_PIPE_BACKLOG)
-        end
-
-        def check_credentials(data, gazelle)
-            password, mode = data.split(' ', 2)
-            mode_sym = mode.to_sym
-
-            if password == @password && MODES.include?(mode_sym)
-                @gazelles[mode_sym] ||= []
-                gazelles = @gazelles[mode_sym]
-                gazelles << gazelle
-                @logger.verbose { "Gazelle <0x#{gazelle.object_id.to_s(16)}> connection was validated" }
-
-                # All the gazelles have loaded. Lets start processing requests
-                if gazelles.length == @counts[mode_sym]
-                    @logger.verbose { "#{mode.capitalize} gazelles are ready" }
-
-                    @iterator_source[mode_sym] = gazelles
-                    @iterators[mode_sym] = gazelles.cycle
-                    @loading[mode_sym].resolve(true)
-                end
-            else
-                @logger.warn "Gazelle <0x#{gazelle.object_id.to_s(16)}> connection closed due to bad credentials"
-                gazelle.close
-            end
-        end
-
         def load_applications
             loaded = []
             @logger.info "Environment: #{ENV['RACK_ENV']} on #{RUBY_ENGINE || 'ruby'} #{RUBY_VERSION}"
@@ -199,6 +121,7 @@ module SpiderGazelle
             # Load the different types of gazelles required
             @options.each do |app|
                 @logger.info "Loading: #{app[:rackup]}" if app[:rackup]
+                AppStore.load(app[:rackup], app)
 
                 mode = app[:mode]
                 loaded << load_gazelles(mode, app[:count], @options) unless @loading[mode]
@@ -209,65 +132,54 @@ module SpiderGazelle
             @thread.all(*loaded)
         end
 
-            
+
         def load_gazelles(mode, count, options)
             defer = @thread.defer
             @loading[mode] = defer
 
-            pass = options[0][:spider]
-
-            if mode == :no_ipc
-                # Provide the password to the gazelle instance
-                options[0][:gazelle] = @password
-
+            if mode == :inline
                 # Start the gazelle
                 require 'spider-gazelle/gazelle'
                 gaz = ::SpiderGazelle::Gazelle.new(@thread, mode).run!(options)
-                @gazelles[:no_ipc] = gaz
+                @gazelles[:inline] = gaz
 
                 # Setup the round robin
-                @iterator_source[mode] = gaz
-                @iterators[mode] = gaz
+                itr = [gaz]
+                @iterator_source[mode] = [gaz]
+                @iterators[mode] = [gaz.thread].cycle
+
                 defer.resolve(true)
             else
                 require 'thread'
 
-                # Provide the password to the gazelle instance
-                options[0][:gazelle] = @password
-                options[0][:gazelle_ipc] = @pipe_file
-
                 count = @counts[mode] = count || ::Libuv.cpu_count || 1
                 @logger.info "#{mode.to_s.capitalize} count: #{count}"
 
-                if mode == :thread
-                    require 'spider-gazelle/gazelle'
-                    reactor = Reactor.instance
+                require 'spider-gazelle/gazelle'
+                reactor = Reactor.instance
 
-                    @threads = []
-                    count.times do
-                        thread = ::Libuv::Reactor.new
-                        @threads << thread
+                @threads = []
+                loaded = []
+                count.times do
+                    loading = @thread.defer
+                    loaded << loading.promise
 
-                        Thread.new { load_gazelle_thread(reactor, thread, mode, options) }
-                    end
-                else
-                    # Remove the spider option
-                    args = LaunchControl.instance.args - ['-s', pass]
+                    thread = ::Libuv::Reactor.new
+                    @threads << thread
 
-                    # Build the command with the gazelle option
-                    args = [EXEC_NAME, '-g', @password, '-f', @pipe_file] + args
-
-                    @logger.verbose { "Launching #{count} gazelle processes" }
-                    count.times do
-                        Thread.new { launch_gazelle(args) }
-                    end
+                    Thread.new { load_gazelle_thread(reactor, thread, mode, options, loading) }
                 end
+
+                defer.resolve(@thread.all(*loaded).then { |gazelles|
+                    @iterator_source[mode] = gazelles
+                    @iterators[mode] = gazelles.map { |gaz| gaz.thread }.cycle
+                })
             end
 
             defer.promise
         end
 
-        def load_gazelle_thread(reactor, thread, mode, options)
+        def load_gazelle_thread(reactor, thread, mode, options, loading)
             # Log any unhandled errors
             thread.notifier reactor.method(:log)
             # Give current requests 5 seconds to complete
@@ -281,25 +193,11 @@ module SpiderGazelle
             end
             thread.run do |thread|
                 # Start the gazelle
-                ::SpiderGazelle::Gazelle.new(thread, :thread).run!(options)
-            end
-        end
-
-        def launch_gazelle(cmd)
-            # Wait for the process to close
-            result = system(*cmd)
-
-            # Kill the spider if a process exits unexpectedly
-            if @running
-                @thread.schedule do
-                    if result
-                        @logger.verbose "Gazelle process exited with exit status 0"
-                    else
-                        @logger.error "Gazelle process exited unexpectedly"
-                    end
-                     
-                    @signaller.general_failure
+                gaz = ::SpiderGazelle::Gazelle.new(thread, :thread)
+                thread.next_tick do
+                    loading.resolve(gaz)
                 end
+                gaz.run!(options)
             end
         end
 
@@ -307,12 +205,11 @@ module SpiderGazelle
             @bound = true
             @loaded = true
 
-            @options.each_index do |id|
-                options = @options[id]
+            @options.each do |options|
                 @logger.verbose { "Loading rackup #{options}" }
                 iterator = @iterators[options[:mode]]
 
-                binding = @bindings[options[:port]] = Binding.new(iterator, id.to_s, options)
+                binding = @bindings[options[:port]] = Binding.new(iterator, options)
                 binding.bind
             end
         end
@@ -344,17 +241,11 @@ module SpiderGazelle
             promises = []
 
             @iterator_source.each do |mode, gazelles|
-                if mode == :no_ipc
-                    # itr is a gazelle in no_ipc mode
+                # End communication with the gazelle threads
+                gazelles.each do |gazelle|
                     defer = @thread.defer
-                    gazelles.shutdown(defer)
+                    gazelle.shutdown(defer)
                     promises << defer.promise
-
-                else
-                    # End communication with the gazelle threads / processes
-                    gazelles.dup.each do |gazelle|
-                        promises << gazelle.close
-                    end
                 end
             end
 
