@@ -101,7 +101,7 @@ module SpiderGazelle
         def shutdown(finished)
             @shutdown_defer = finished
 
-            @logger.verbose { "Spider Pid: #{Process.pid} shutting down" }
+            @logger.verbose { "Spider Pid: #{Process.pid} shutting down (loaded #{@loaded})" }
 
             if @loaded
                 perform_shutdown

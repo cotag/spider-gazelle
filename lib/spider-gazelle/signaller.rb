@@ -8,7 +8,7 @@ module SpiderGazelle
         include Singleton
 
 
-        attr_reader   :thread, :pipe
+        attr_reader   :thread, :pipe, :is_connected, :shutting_down
         attr_accessor :gazelle
 
 
@@ -19,7 +19,8 @@ module SpiderGazelle
             # This is used to check if an instance of spider-gazelle is already running
             @is_master = false
             @is_client = false
-            @is_connected = false
+            @is_connected  = false
+            @shutting_down = false
             @client_check = @thread.defer
             @validated = [] # Set requires more processing
             @validating = {}
@@ -42,6 +43,7 @@ module SpiderGazelle
 
         def shutdown
             defer = @thread.defer
+            @shutting_down = true
 
             # Close the SIGNAL_SERVER pipe
             @pipe.close if @is_connected
@@ -115,7 +117,6 @@ module SpiderGazelle
             @pipe.finally do
                 if @is_client
                     @is_connected = false
-                    panic!(nil)
                 else
                     # Assume the role of master
                     become_sg_master
@@ -154,7 +155,7 @@ module SpiderGazelle
                     # If all the process connections are gone then we want to shutdown
                     # This should never happen under normal conditions
                     if @validated.length == 0
-                        Reactor.instance.shutdown
+                        Reactor.instance.shutdown unless @shutting_down
                     end
                 end
 
@@ -174,7 +175,7 @@ module SpiderGazelle
             #@logger.error "Master pipe went missing: #{reason}"
             # Server most likely exited
             # We'll shutdown here
-            STDERR.puts "\n\npanic! #{reason.inspect}\n\n\n"
+            STDERR.puts "\n\npanic! #{reason.inspect}\n#{caller.join("\n")}\n\n\n"
             STDERR.flush
             Reactor.instance.shutdown
         end

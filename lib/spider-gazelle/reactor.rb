@@ -38,16 +38,17 @@ module SpiderGazelle
             end
 
             @thread.schedule do
-                return if @shutdown_called
-                @shutdown_called = true
+                if not @shutdown_called
+                    @shutdown_called = true
 
-                # Signaller will manage the shutdown of the gazelles
-                signaller = Signaller.instance.shutdown
-                signaller.finally do
-                    @thread.stop
-                    # New line on exit to avoid any ctrl-c characters
-                    # We check for pipe as we only want the master process to print this
-                    puts "\nSpider-Gazelle leaps through the veldt\n" unless @logger.pipe
+                    # Signaller will manage the shutdown of the gazelles
+                    signaller = Signaller.instance.shutdown
+                    signaller.finally do
+                        @thread.stop
+                        # New line on exit to avoid any ctrl-c characters
+                        # We check for pipe as we only want the master process to print this
+                        puts "\nSpider-Gazelle leaps through the veldt\n"
+                    end
                 end
             end
         end

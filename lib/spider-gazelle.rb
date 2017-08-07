@@ -73,25 +73,21 @@ module SpiderGazelle
         # ---------------------------------------
         def launch_spider(args)
             require 'securerandom'
-            require 'thread'
 
             @password ||= SecureRandom.hex
+
             #cmd = "#{EXEC_NAME} -s #{@password} #{Shellwords.join(args)}"
-            cmd = [EXEC_NAME, '-s', @password] + args
 
-            Thread.new do
-                result = system(*cmd)
-
-                # TODO:: We need to detect a failed load
-                # This is a little more tricky as spiders
-                # may come and go without this process exiting
+            thread = Reactor.instance.thread
+            spider = thread.spawn(EXEC_NAME, args: (['-s', @password] + args), mode: :inherit)
+            spider.finally do
+                signaller = ::SpiderGazelle::Signaller.instance
+                signaller.panic!('Unexpected spider exit') unless signaller.shutting_down
             end
         end
 
         # This is called when a spider process starts
         def start_spider(signaller, logger, options)
-            logger.set_client signaller.pipe unless options[0][:isolate]
-
             require 'spider-gazelle/spider'
             Spider.instance.run!(options)
         end

@@ -5,7 +5,7 @@ require 'libuv'
 module SpiderGazelle
     class Logger
         include Singleton
-        attr_reader :level, :thread, :pipe
+        attr_reader :level, :thread, :stdout
         attr_accessor :formatter
 
 
@@ -22,19 +22,14 @@ module SpiderGazelle
 
         def initialize
             @thread = ::Libuv::Reactor.default
+            @stdout = @thread.pipe
+            @stdout.open(1)
             @level = DEFAULT_LEVEL
-            @write = method(:server_write)
         end
 
 
         def self.log(data)
-            Logger.instance.server_write(data)
-        end
-
-
-        def set_client(uv_io)
-            @pipe = uv_io
-            @write = method(:client_write)
+            Logger.instance.stdout.write(data)
         end
 
         def level=(level)
@@ -83,7 +78,7 @@ module SpiderGazelle
         def verbose(msg = nil)
             if @verbose
                 msg = yield if block_given?
-                @write.call ">> #{msg}\n"
+                @stdout.write ">> #{msg}\n"
             end
         end
 
@@ -95,11 +90,6 @@ module SpiderGazelle
             error(message)
         end
 
-        # NOTE:: should only be called on reactor thread
-        def server_write(msg)
-            STDOUT.write msg
-        end
-
 
         protected
 
@@ -107,13 +97,8 @@ module SpiderGazelle
         def log(level, msg)
             output = "[#{level}] #{msg}\n"
             @thread.schedule do
-                @write.call output
+                @stdout.write output
             end
-        end
-
-        # NOTE:: should only be called on reactor thread
-        def client_write(msg)
-            @pipe.write "\x02Logger log #{msg}\x03"
         end
     end
 end
