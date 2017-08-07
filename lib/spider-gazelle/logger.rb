@@ -5,7 +5,7 @@ require 'libuv'
 module SpiderGazelle
     class Logger
         include Singleton
-        attr_reader :level, :thread, :stdout
+        attr_reader :level, :thread
         attr_accessor :formatter
 
 
@@ -29,7 +29,7 @@ module SpiderGazelle
 
 
         def self.log(data)
-            Logger.instance.stdout.write(data)
+            Logger.instance.write(data)
         end
 
         def level=(level)
@@ -78,8 +78,12 @@ module SpiderGazelle
         def verbose(msg = nil)
             if @verbose
                 msg = yield if block_given?
-                @stdout.write ">> #{msg}\n"
+                @thread.schedule { @stdout.write ">> #{msg}\n" }
             end
+        end
+
+        def write(msg)
+            @thread.schedule { @stdout.write msg }
         end
 
         def print_error(e, msg = nil, trace = nil)
