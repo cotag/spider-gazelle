@@ -22,14 +22,12 @@ module SpiderGazelle
 
         def initialize
             @thread = ::Libuv::Reactor.default
-            @stdout = @thread.pipe
-            @stdout.open(1)
             @level = DEFAULT_LEVEL
         end
 
 
         def self.log(data)
-            Logger.instance.write(data)
+            STDOUT.write data
         end
 
         def level=(level)
@@ -78,12 +76,12 @@ module SpiderGazelle
         def verbose(msg = nil)
             if @verbose
                 msg = yield if block_given?
-                @thread.schedule { @stdout.write ">> #{msg}\n" }
+                STDOUT.write ">> #{msg}\n"
             end
         end
 
         def write(msg)
-            @thread.schedule { @stdout.write msg }
+            STDOUT.write msg
         end
 
         def print_error(e, msg = nil, trace = nil)
@@ -99,10 +97,7 @@ module SpiderGazelle
 
 
         def log(level, msg)
-            output = "[#{level}] #{msg}\n"
-            @thread.schedule do
-                @stdout.write output
-            end
+            STDOUT.write "[#{level}] #{msg}\n"
         end
     end
 end
