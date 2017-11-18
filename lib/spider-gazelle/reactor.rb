@@ -18,16 +18,14 @@ module SpiderGazelle
             @shutdown_called = false
         end        
 
-        def run(&block)
+        def run
             if @running
-                @thread.schedule block
+                @thread.schedule { yield }
             else
                 @running = true
                 @thread.notifier method(:log)
                 @thread.on_program_interrupt @shutdown
-                @thread.run { |thread|
-                    block.call
-                }
+                @thread.run { yield }
             end
         end
 
