@@ -89,8 +89,6 @@ module SpiderGazelle
 
         def connect_to_sg_master
             @pipe = @thread.pipe :ipc
-
-            process = method(:process_response)
             @pipe.connect(SIGNAL_SERVER) do |client|
                 @is_client = true
                 @is_connected = true
@@ -103,7 +101,12 @@ module SpiderGazelle
                     delimiter: "\x03"
                 })
 
-                client.progress process
+                # The client processes responses here
+                client.progress do |data, server|
+                    @parser.extract(data).each do |msg|
+                        Spider.instance.__send__(msg)
+                    end
+                end
                 client.start_read
                 @client_check.resolve(true)
             end
@@ -138,7 +141,6 @@ module SpiderGazelle
             rescue
             end
 
-            process = method(:process_request)
             @pipe.bind(SIGNAL_SERVER) do |client|
                 @logger.verbose { "Client <0x#{client.object_id.to_s(16)}> connection made" }
                 @validating[client.object_id] = SignalParser.new
@@ -159,12 +161,14 @@ module SpiderGazelle
                     end
                 end
 
-                client.progress process
+                client.progress do |data, client|
+                    process_request(data, client)
+                end
                 client.start_read
             end
 
             # catch server errors
-            @pipe.catch method(:panic!)
+            @pipe.catch { |error| panic! error }
             @pipe.finally { @is_connected = false }
 
             # start listening
@@ -206,13 +210,6 @@ module SpiderGazelle
                     client.close
                     @logger.warn "Client <0x#{client.object_id.to_s(16)}> connection was closed due to bad credentials"
                 end
-            end
-        end
-
-        # The client processes responses here
-        def process_response(data, server)
-            @parser.extract(data).each do |msg|
-                Spider.instance.__send__(msg)
             end
         end
     end

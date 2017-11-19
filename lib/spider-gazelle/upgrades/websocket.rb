@@ -21,15 +21,34 @@ class SpiderGazelle::Websocket < ::Libuv::Q::DeferredPromise
         @driver = ::WebSocket::Driver.rack self
 
         # Pass data from the socket to the driver
-        @socket.progress &method(:socket_read)
-        @socket.finally &method(:socket_close)
-
+        @socket.progress do |data|
+            begin
+                @driver.parse data
+            rescue Exception => e
+                # Prevent hanging sockets
+                @socket.close
+                raise e
+            end
+        end
+        @socket.finally do
+            if @shutdown_called.nil?
+                @defer.reject WebSocket::Driver::CloseEvent.new(1006, 'connection was closed unexpectedly')
+            end
+        end
 
         # Driver has indicated that it is closing
         # We'll close the socket after writing any remaining data
-        @driver.on :close, &method(:on_close)
-        @driver.on :message, &method(:on_message)
-        @driver.on :error, &method(:on_error)
+        @driver.on :close do |event|
+            @shutdown_called = true
+            @socket.shutdown
+            @defer.resolve event
+        end
+        @driver.on :message do |event|
+            @progress.call(event.data, self) unless @progress.nil?
+        end
+        @driver.on :error do |event|
+            @defer.reject event
+        end
     end
 
     # Write some text to the websocket connection
@@ -60,38 +79,5 @@ class SpiderGazelle::Websocket < ::Libuv::Q::DeferredPromise
     def on_open(callback = nil, &blk)
         callback ||= blk
         @driver.on :open, &callback
-    end
-
-    protected
-
-    def socket_read(data, tcp)
-        begin
-            @driver.parse data
-        rescue => e
-            # Prevent hanging sockets
-            @socket.close
-            raise e
-        end
-    end
-
-    def socket_close
-        if @shutdown_called.nil?
-            @defer.reject WebSocket::Driver::CloseEvent.new(1006, 'connection was closed unexpectedly')
-        end
-    end
-
-
-    def on_message(event)
-        @progress.call(event.data, self) unless @progress.nil?
-    end
-
-    def on_error(event)
-        @defer.reject event
-    end
-
-    def on_close(event)
-        @shutdown_called = true
-        @socket.shutdown
-        @defer.resolve event
     end
 end

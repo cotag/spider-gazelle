@@ -74,8 +74,6 @@ module SpiderGazelle
                 @thread = thread
                 @logger = logger
 
-                @queue_response = method :queue_response
-                @write_chunk = method :write_chunk
                 @gazelles = gazelles
 
                 # The parser state for this instance
@@ -91,9 +89,7 @@ module SpiderGazelle
 
             attr_reader   :parsing
 
-
-            def self.on_progress(data, socket); end
-            DUMMY_PROGRESS = self.method :on_progress
+            DUMMY_PROGRESS = proc {}
 
             def load(socket, port, app, tls)
                 @socket = socket
@@ -113,7 +109,7 @@ module SpiderGazelle
 
             def on_close
                 # Unlink the progress callback (prevent funny business)
-                @socket.progress DUMMY_PROGRESS
+                @socket.progress &DUMMY_PROGRESS
                 @socket.storage = nil
                 reset
                 @return_method.call(self)
@@ -189,7 +185,15 @@ module SpiderGazelle
                 @processing = @requests.shift
                 if @processing
                     request = @processing
-                    request.then @queue_response
+
+                    # queue response
+                    request.then do |response|
+                        @responses << response
+                        send_next_response unless @transmitting
+
+                        # Processing will be set to nil if the array is empty
+                        process_next
+                    end
 
                     @gazelles.next.schedule do
                         process_on_gazelle(request)
@@ -222,14 +226,6 @@ module SpiderGazelle
             # ----------------
             # Response Sending
             # ----------------
-            def queue_response(response)
-                @responses << response
-                send_next_response unless @transmitting
-
-                # Processing will be set to nil if the array is empty
-                process_next
-            end
-
             def send_next_response
                 request, result = @responses.shift
                 @transmitting = request
@@ -355,14 +351,17 @@ module SpiderGazelle
                     write_headers keep_alive, status, headers
 
                     # Stream the response (pass directly into @socket.write)
-                    body.each &@socket.method(:write)
+                    body.each { |data| @socket.write(data) }
                     @socket.shutdown if keep_alive == false
                 else
                     headers['Transfer-Encoding'] = 'chunked'
                     write_headers keep_alive, status, headers
 
                     # Stream the response
-                    body.each &@write_chunk
+                    body.each do |part|
+                        chunk = part.bytesize.to_s(16) << "\r\n" << part << "\r\n"
+                        @socket.write chunk
+                    end
 
                     @socket.write "0\r\n\r\n"
                     @socket.shutdown if keep_alive == false
@@ -388,11 +387,6 @@ module SpiderGazelle
                 end
                 header << "\r\n"
                 @socket.write header
-            end
-
-            def write_chunk(part)
-                chunk = part.bytesize.to_s(16) << "\r\n" << part << "\r\n"
-                @socket.write chunk
             end
 
             HTTP_STATUS_CODES = Rack::Utils::HTTP_STATUS_CODES

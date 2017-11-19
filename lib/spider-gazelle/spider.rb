@@ -181,7 +181,7 @@ module SpiderGazelle
 
         def load_gazelle_thread(reactor, thread, mode, options, loading)
             # Log any unhandled errors
-            thread.notifier reactor.method(:log)
+            thread.notifier { |*args| reactor.log(*args) }
             # Give current requests 5 seconds to complete
             thread.on_program_interrupt do
                 timer = thread.timer {

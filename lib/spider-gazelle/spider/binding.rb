@@ -19,12 +19,10 @@ module SpiderGazelle
                 @port = @options[:port]
                 @app, @app_port, @tls = AppStore.lookup(options[:rackup])
 
-                @set_protocol  = method(:set_protocol)
-
                 @http1_cache = []
                 @http2_cache = []
-                @return_http1 = method(:return_http1)
-                @return_http2 = method(:return_http2)
+                @return_http1 = proc { |parser| @http1_cache << parser }
+                @return_http2 = proc { |parser| @http2_cache << parser }
                 @parser_count = 0
             end
 
@@ -78,7 +76,7 @@ module SpiderGazelle
             end
 
             def prepare_client_tls(client)
-                client.on_handshake @set_protocol
+                client.on_handshake { |client, version| set_protocol(client, version) }
                 client.start_tls(@tls)
 
                 client.start_read
@@ -93,7 +91,7 @@ module SpiderGazelle
                 end
 
                 parser.load(client, @app_port, @app, @tls)
-                client.progress do |data, _|
+                client.progress do |data|
                     parser.parse(data)
                 end
             end
@@ -109,18 +107,10 @@ module SpiderGazelle
                 Http1.new(@return_http1, @h1_parser_obj, @thread, @logger, @iterator)
             end
 
-            def return_http1(parser)
-                @http1_cache.push parser
-            end
-
             def new_http2_parser
                 raise NotImplementedError.new 'TODO:: Create HTTP2 parser class'
                 @parser_count += 1
                 Http2.new(@return_http2, @thread, @logger, @iterator)
-            end
-
-            def return_http2(parser)
-                @http2_cache << parser
             end
         end
     end

@@ -14,7 +14,6 @@ module SpiderGazelle
             @thread = ::Libuv::Reactor.default
             @logger = Logger.instance
             @running = false
-            @shutdown = method(:shutdown)
             @shutdown_called = false
         end        
 
@@ -23,8 +22,8 @@ module SpiderGazelle
                 @thread.schedule { yield }
             else
                 @running = true
-                @thread.notifier method(:log)
-                @thread.on_program_interrupt @shutdown
+                @thread.notifier { |*args| log(*args) }
+                @thread.on_program_interrupt { shutdown }
                 @thread.run { yield }
             end
         end
