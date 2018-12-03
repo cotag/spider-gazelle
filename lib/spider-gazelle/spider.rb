@@ -47,6 +47,7 @@ module SpiderGazelle
             @running = true
             @loaded = false
             @bound = false
+            @delay_port_binding = false
 
             @load_complete = @thread.defer
         end
@@ -71,7 +72,8 @@ module SpiderGazelle
 
                     # This happends on the master thread so we don't need to check
                     # for the shutdown events here
-                    bind_application_ports
+                    @loaded = true
+                    bind_application_ports unless @delay_port_binding
                 else
                     @logger.warn "A shutdown event occured while loading"
                     perform_shutdown
@@ -84,7 +86,7 @@ module SpiderGazelle
 
         # Load gazelles and wait for the bindings to be sent
         def wait
-            
+
         end
 
         # Pass existing bindings to the master process
@@ -108,6 +110,26 @@ module SpiderGazelle
             else
                 @running = false
             end
+        end
+
+        def bind_application_ports
+            if @delay_port_binding && !@loaded
+                loaded.finally { bind_application_ports }
+                return
+            end
+            @bound = true
+
+            @options.each do |options|
+                @logger.verbose { "Loading rackup #{options}" }
+                iterator = @iterators[options[:mode]]
+
+                binding = @bindings[options[:port]] = Binding.new(iterator, options)
+                binding.bind
+            end
+        end
+
+        def delay_port_binding
+            @delay_port_binding = true
         end
 
 
@@ -198,19 +220,6 @@ module SpiderGazelle
                     loading.resolve(gaz)
                 end
                 gaz.run!(options)
-            end
-        end
-
-        def bind_application_ports
-            @bound = true
-            @loaded = true
-
-            @options.each do |options|
-                @logger.verbose { "Loading rackup #{options}" }
-                iterator = @iterators[options[:mode]]
-
-                binding = @bindings[options[:port]] = Binding.new(iterator, options)
-                binding.bind
             end
         end
 
